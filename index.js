@@ -2,6 +2,7 @@ const express = require("express");
 const { google } = require("googleapis");
 const { randomUUID } = require("node:crypto");
 const store = require("./store");
+const { registerMonitoringPages } = require("./pages");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -52,6 +53,8 @@ app.get("/", (req, res) => {
   res.send("Google Chat Approval Bot is running");
 });
 
+registerMonitoringPages(app, store, process.env);
+
 // ==============================
 // DEMO HTML
 // ==============================
@@ -72,6 +75,7 @@ app.get("/approval-demo", async (req, res) => {
 <!DOCTYPE html>
 <html>
 <head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Approval Demo</title>
 
   <style>
@@ -113,6 +117,7 @@ app.get("/approval-demo", async (req, res) => {
 
 <div class="card">
 
+<nav><a href="/users">Pengguna</a> · <a href="/approvals">Riwayat approval</a></nav>
 <h2>Approval Simulation</h2>
 
 <form method="POST" action="/send-approval">
@@ -208,13 +213,23 @@ app.post("/send-approval", async (req, res) => {
 
       status: "PENDING",
 
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
+      deliveryStatus: "SENDING",
     });
 
-    await chat.spaces.messages.create({
-      parent: approver.dmSpace,
-
-      requestBody: message,
+    let sent;
+    try {
+      sent = await chat.spaces.messages.create({
+        parent: approver.dmSpace,
+        requestBody: message,
+      });
+    } catch (error) {
+      await store.updateDelivery(approvalId, { deliveryStatus: "FAILED", deliveryUpdatedAt: new Date().toISOString() });
+      throw error;
+    }
+    await store.updateDelivery(approvalId, {
+      deliveryStatus: "SENT", sentAt: new Date().toISOString(),
+      messageName: sent.data?.name || null,
     });
 
     res.send(`
@@ -276,7 +291,11 @@ app.post("/google-chat", async (req, res) => {
     space?.spaceType === "DIRECT_MESSAGE"
   ) {
 
+    const existingUser = await store.getUser(user.email);
+    const seenAt = new Date().toISOString();
     await store.setUser(user.email, {
+      registeredAt: existingUser?.registeredAt || seenAt,
+      lastSeenAt: seenAt,
       email: user.email,
 
       displayName:

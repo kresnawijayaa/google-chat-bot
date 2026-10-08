@@ -46,3 +46,11 @@ Jalankan npm test. Tes mencakup alur HTTP, pengiriman kartu dengan Chat API mock
 - https://neon.com/docs/connect/connect-from-any-app
 - https://github.com/neondatabase/serverless
 - https://developers.google.com/workspace/add-ons/chat/convert
+
+## Halaman monitoring
+
+- /users: daftar pengguna, pencarian nama/email, ruang DM, dan waktu interaksi.
+- /approvals: riwayat pengajuan dengan filter status/approver, pencarian, dan pagination 25 baris.
+- DECLINED ditampilkan sebagai Rejected. Status pengiriman dicatat terpisah (SENT, FAILED, SENDING); SENT bukan tanda pesan telah dibaca. Data lama yang belum memiliki metadata pengiriman ditampilkan apa adanya.
+- Halaman mengambil data dari tabel yang sudah ada; tidak membutuhkan perubahan schema.
+- /users dan /approvals memerlukan HTTP Basic login melalui HTTPS. Atur ADMIN_PASSWORD minimal 12 karakter di Vercel (password acak yang kuat), ADMIN_USERNAME opsional (default admin), lalu redeploy. Browser akan menampilkan prompt login. Jika belum dikonfigurasi, kedua halaman tertutup dengan HTTP 503. Halaman demo lama masih mengikuti akses sebelumnya.

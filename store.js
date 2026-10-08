@@ -30,6 +30,31 @@ module.exports = {
       [id, approval.approverEmail, approval.status, JSON.stringify(approval)],
     );
   },
+  async updateDelivery(id, metadata) {
+    if (!sql) { const approval = approvals.get(id); if (approval) Object.assign(approval, metadata); return; }
+    await sql.query("UPDATE bot_approvals SET data = data || $2::jsonb WHERE id = $1", [id, JSON.stringify(metadata)]);
+  },
+  async listApprovals({ status = "", approver = "", q = "", page = 1 } = {}) {
+    const pageSize = 25;
+    const params = [status, approver, q.toLowerCase()];
+    const where = `WHERE ($1 = '' OR status = $1)
+      AND ($2 = '' OR approver_email = $2)
+      AND ($3 = '' OR strpos(lower(concat_ws(' ', id, approver_email, data->>'employeeName', data->>'type')), $3) > 0)`;
+    let total, items;
+    if (sql) {
+      total = Number((await sql.query("SELECT COUNT(*) AS total FROM bot_approvals " + where, params))[0].total);
+    } else {
+      items = [...approvals.values()].filter(a => (!status || a.status === status) && (!approver || a.approverEmail === approver)
+        && (!q || [a.id, a.approverEmail, a.employeeName, a.type].join(' ').toLowerCase().includes(q.toLowerCase())))
+        .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || b.id.localeCompare(a.id));
+      total = items.length;
+    }
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    page = Math.min(pages, Math.max(1, Math.floor(Number(page) || 1)));
+    if (sql) items = (await sql.query("SELECT data FROM bot_approvals " + where + " ORDER BY data->>'createdAt' DESC NULLS LAST, id DESC LIMIT $4 OFFSET $5", [...params, pageSize, (page - 1) * pageSize])).map(row => row.data);
+    else items = items.slice((page - 1) * pageSize, page * pageSize);
+    return { items, total, page, pages };
+  },
   async decide(id, email, action) {
     if (!["approve", "decline"].includes(action)) return { error: "invalid" };
     const status = action === "approve" ? "APPROVED" : "DECLINED";
