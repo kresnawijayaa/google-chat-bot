@@ -16,6 +16,10 @@ module.exports = {
     if (!sql) return users.get(email);
     return (await sql.query("SELECT data FROM bot_users WHERE email = $1", [email]))[0]?.data;
   },
+  async deleteUser(email) {
+    if (!sql) return users.delete(email);
+    return (await sql.query("DELETE FROM bot_users WHERE email = $1 RETURNING email", [email])).length > 0;
+  },
   async setUser(email, user) {
     if (!sql) { users.set(email, user); return; }
     await sql.query(

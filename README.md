@@ -54,3 +54,7 @@ Jalankan npm test. Tes mencakup alur HTTP, pengiriman kartu dengan Chat API mock
 - DECLINED ditampilkan sebagai Rejected. Status pengiriman dicatat terpisah (SENT, FAILED, SENDING); SENT bukan tanda pesan telah dibaca. Data lama yang belum memiliki metadata pengiriman ditampilkan apa adanya.
 - Halaman mengambil data dari tabel yang sudah ada; tidak membutuhkan perubahan schema.
 - /users dan /approvals memerlukan HTTP Basic login melalui HTTPS. Atur ADMIN_PASSWORD minimal 12 karakter di Vercel (password acak yang kuat), ADMIN_USERNAME opsional (default admin), lalu redeploy. Browser akan menampilkan prompt login. Jika belum dikonfigurasi, kedua halaman tertutup dengan HTTP 503. Halaman demo lama masih mengikuti akses sebelumnya.
+
+### Hapus pengguna
+
+Di /users pilih Hapus pengguna, lalu konfirmasi pada halaman berikutnya. Penghapusan memerlukan login admin dan token konfirmasi yang berlaku 15 menit. Hanya registrasi pengguna yang dihapus; riwayat dan pengajuan yang telah dikirim tetap ada. Pengguna bisa terdaftar kembali saat berinteraksi dengan bot melalui DM.

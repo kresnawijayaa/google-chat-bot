@@ -108,6 +108,10 @@ test("PostgreSQL schema and cross-instance decisions execute against PGlite", as
     assert.equal(race.status, row.status);
     assert.equal((await second.listApprovals({ q: "unmatched" })).total, 0);
     await assert.rejects(db.query("UPDATE bot_approvals SET status = $1 WHERE id = 'race'", [row.status === "APPROVED" ? "DECLINED" : "APPROVED"]));
+    assert.equal(await first.deleteUser(email), true);
+    assert.equal(await second.getUser(email), undefined);
+    assert.equal(await second.deleteUser(email), false);
+    assert.equal((await second.listApprovals({ approver: email })).total, 2);
     const failing = loadStore(env, { query: async () => { throw new Error("database unavailable"); } });
     await assert.rejects(failing.listUsers(), /database unavailable/);
   } finally { await db.close(); }
@@ -166,5 +170,39 @@ test("Monitoring access stays closed until an admin password is configured", asy
       assert.equal(response.status, 503);
       assert.ok((await response.text()).includes("ADMIN_PASSWORD"));
     }
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test("Deleting users requires admin and a valid confirmation, and preserves approval history", async () => {
+  const store = loadStore();
+  const email = "delete'@example.com";
+  await store.setUser(email, { email, displayName: "Test User" });
+  await store.setApproval("KEEP", { id: "KEEP", approverEmail: email, status: "PENDING" });
+  const app = loadApp(store, { PUBLIC_BASE_URL: "https://bot.vercel.app", ADMIN_PASSWORD: "test-admin-password" });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  const base = "http://127.0.0.1:" + server.address().port;
+  const headers = { Authorization: "Basic " + Buffer.from("admin:test-admin-password").toString("base64") };
+  const post = (body, auth = headers) => fetch(base + "/users/delete", { method: "POST", headers: { ...auth, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(body), redirect: "manual" });
+  try {
+    assert.equal((await post({email}, {})).status, 401);
+    assert.equal((await post({email})).status, 403);
+    assert.ok(await store.getUser(email));
+    const confirmation = await (await fetch(base + "/users/delete?email=" + encodeURIComponent(email), {headers})).text();
+    assert.ok(confirmation.includes("Ya, hapus pengguna"));
+    assert.ok(await store.getUser(email)); // GET never deletes.
+    const token = confirmation.match(/name="token" value="([a-f0-9]+)"/)[1];
+    const expires = confirmation.match(/name="expires" value="([0-9]+)"/)[1];
+    assert.equal((await post({ email: "different@example.com", expires, token })).status, 403);
+    assert.equal((await post({ email, expires: "1", token })).status, 403);
+    const response = await post({ email, expires, token });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get("location"), "/users?notice=deleted");
+    assert.equal(await store.getUser(email), undefined);
+    assert.equal((await store.listApprovals({ approver: email })).total, 1);
+    assert.equal((await post({ email, expires, token })).headers.get("location"), "/users?notice=missing");
+    assert.equal((await fetch(base + "/users/delete?email=" + encodeURIComponent(email), { headers })).status, 404);
+    await store.setUser(email, { email }); // A later DM can register the user again.
+    assert.ok(await store.getUser(email));
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
