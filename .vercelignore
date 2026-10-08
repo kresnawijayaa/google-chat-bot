@@ -1,0 +1,6 @@
+node_modules
+.git
+.env*
+*service-account*.json
+bot-chat-511003-80064b86bc1b.json
+test
