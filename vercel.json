@@ -5,9 +5,17 @@
     {
       "src": "index.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
+    {
+      "src": "/profile-picture-bot.jpeg",
+      "dest": "/public/profile-picture-bot.jpeg"
+    },
     {
       "src": "/(.*)",
       "dest": "/index.js"
