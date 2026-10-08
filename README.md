@@ -16,7 +16,7 @@ Registrasi pengguna dan approval harus tersedia untuk setiap instance Vercel ser
 ## Setup deployment lewat push
 
 1. Buat repository Git dan push project ke GitHub. File credentials bot-chat-511003-80064b86bc1b.json sudah diabaikan oleh Git dan Vercel; jangan upload file tersebut.
-2. Di Vercel, pilih Add New > Project dan import repository. Vercel mendeteksi Express; tidak perlu build command atau output directory khusus.
+2. Di Vercel, pilih Add New > Project dan import repository. vercel.json menetapkan index.js sebagai fungsi Node dan mengarahkan semua request ke Express. Jangan set Output Directory ke root project; konfigurasi builds di source menentukan output deployment.
 3. Isi environment variables pada Settings > Environment Variables:
    - DATABASE_URL: connection string Neon.
    - PUBLIC_BASE_URL: https://nama-project.vercel.app, domain Production stabil tanpa /google-chat.
