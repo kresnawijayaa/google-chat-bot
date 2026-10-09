@@ -1,0 +1,15 @@
+{
+  "id": "APR-00000000-0000-4000-8000-000000000001",
+  "employeeName": "Budi Santoso",
+  "type": "Cuti",
+  "date": "12 Oktober 2026",
+  "reason": "Keperluan keluarga",
+  "approverEmail": "atasan@example.com",
+  "status": "APPROVED",
+  "createdAt": "2026-10-09T07:35:15.613Z",
+  "deliveryStatus": "SENT",
+  "sentAt": "2026-10-09T07:35:15.613Z",
+  "messageName": "spaces/DMDEMO/messages/client-demo",
+  "updatedAt": "2026-10-09T07:35:15.615Z",
+  "approvedBy": "atasan@example.com"
+}

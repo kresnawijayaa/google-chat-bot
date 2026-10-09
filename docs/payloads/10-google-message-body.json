@@ -1,0 +1,85 @@
+{
+  "text": "Approval Cuti - Budi Santoso",
+  "cardsV2": [
+    {
+      "cardId": "approval-APR-00000000-0000-4000-8000-000000000001",
+      "card": {
+        "header": {
+          "title": "Permohonan Approval",
+          "subtitle": "APR-00000000-0000-4000-8000-000000000001"
+        },
+        "sections": [
+          {
+            "widgets": [
+              {
+                "decoratedText": {
+                  "topLabel": "Nama Pemohon",
+                  "text": "Budi Santoso"
+                }
+              },
+              {
+                "decoratedText": {
+                  "topLabel": "Jenis Pengajuan",
+                  "text": "Cuti"
+                }
+              },
+              {
+                "decoratedText": {
+                  "topLabel": "Tanggal",
+                  "text": "12 Oktober 2026"
+                }
+              },
+              {
+                "textParagraph": {
+                  "text": "<b>Alasan</b><br>Keperluan keluarga"
+                }
+              },
+              {
+                "buttonList": {
+                  "buttons": [
+                    {
+                      "text": "Approve",
+                      "onClick": {
+                        "action": {
+                          "function": "https://gateway.example.com/google-chat",
+                          "parameters": [
+                            {
+                              "key": "action",
+                              "value": "approve"
+                            },
+                            {
+                              "key": "approvalId",
+                              "value": "APR-00000000-0000-4000-8000-000000000001"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "text": "Decline",
+                      "onClick": {
+                        "action": {
+                          "function": "https://gateway.example.com/google-chat",
+                          "parameters": [
+                            {
+                              "key": "action",
+                              "value": "decline"
+                            },
+                            {
+                              "key": "approvalId",
+                              "value": "APR-00000000-0000-4000-8000-000000000001"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

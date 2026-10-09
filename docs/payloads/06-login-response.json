@@ -1,0 +1,5 @@
+{
+  "access_token": "<GATEWAY_JWT>",
+  "token_type": "Bearer",
+  "expires_in": 600
+}

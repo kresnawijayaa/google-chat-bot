@@ -1,0 +1,52 @@
+{
+  "hostAppDataAction": {
+    "chatDataAction": {
+      "updateMessageAction": {
+        "message": {
+          "text": "❌ DECLINED",
+          "cardsV2": [
+            {
+              "cardId": "approval-result-APR-00000000-0000-4000-8000-000000000001",
+              "card": {
+                "header": {
+                  "title": "❌ DECLINED",
+                  "subtitle": "APR-00000000-0000-4000-8000-000000000001"
+                },
+                "sections": [
+                  {
+                    "widgets": [
+                      {
+                        "decoratedText": {
+                          "topLabel": "Pemohon",
+                          "text": "Budi Santoso"
+                        }
+                      },
+                      {
+                        "decoratedText": {
+                          "topLabel": "Jenis",
+                          "text": "Cuti"
+                        }
+                      },
+                      {
+                        "decoratedText": {
+                          "topLabel": "Tanggal",
+                          "text": "12 Oktober 2026"
+                        }
+                      },
+                      {
+                        "decoratedText": {
+                          "topLabel": "Diproses oleh",
+                          "text": "atasan@example.com"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

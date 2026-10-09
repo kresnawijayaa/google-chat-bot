@@ -1,0 +1,11 @@
+{
+  "hostAppDataAction": {
+    "chatDataAction": {
+      "createMessageAction": {
+        "message": {
+          "text": "Silakan kirim NIK Anda sebagai pesan berikutnya. NIK harus sesuai akun Workspace Anda dan terdaftar dalam daftar yang diizinkan. Sesi berlaku 10 menit."
+        }
+      }
+    }
+  }
+}

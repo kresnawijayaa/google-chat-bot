@@ -36,3 +36,5 @@ Port default hub 3001, gateway 3002. Untuk transport lokal gunakan GATEWAY_URL=h
 Root vercel.json menonaktifkan deployment Git project lama yang menunjuk root repository. Project baru memakai konfigurasi subfolder.
 
 Mode debug development: [docs/debug-flow.md](docs/debug-flow.md). Aktifkan DEBUG_FLOW=true di kedua layanan untuk melihat payload, endpoint, hasil dan operasi database dengan credential disamarkan.
+
+Dokumentasi teknis lengkap dan contoh payload: [docs/dokumentasi-gchat.md](docs/dokumentasi-gchat.md). File JSON terpisah: [docs/payloads](docs/payloads/README.md).

@@ -1,0 +1,11 @@
+{
+  "hostAppDataAction": {
+    "chatDataAction": {
+      "createMessageAction": {
+        "message": {
+          "text": "Approval ini sudah APPROVED."
+        }
+      }
+    }
+  }
+}

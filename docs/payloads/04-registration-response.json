@@ -1,0 +1,11 @@
+{
+  "hostAppDataAction": {
+    "chatDataAction": {
+      "createMessageAction": {
+        "message": {
+          "text": "Pendaftaran berhasil. Anda sudah terdaftar untuk menerima approval."
+        }
+      }
+    }
+  }
+}

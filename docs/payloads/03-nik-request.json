@@ -1,0 +1,18 @@
+{
+  "chat": {
+    "user": {
+      "email": "atasan@example.com",
+      "name": "users/123456",
+      "displayName": "Atasan Demo"
+    },
+    "space": {
+      "name": "spaces/DMDEMO",
+      "spaceType": "DIRECT_MESSAGE"
+    },
+    "messagePayload": {
+      "message": {
+        "text": "00123456"
+      }
+    }
+  }
+}

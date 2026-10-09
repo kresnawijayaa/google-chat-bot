@@ -1,0 +1,20 @@
+{
+  "commonEventObject": {
+    "parameters": {
+      "approvalId": "APR-00000000-0000-4000-8000-000000000001",
+      "action": "decline"
+    }
+  },
+  "chat": {
+    "user": {
+      "email": "atasan@example.com",
+      "name": "users/123456",
+      "displayName": "Atasan Demo"
+    },
+    "space": {
+      "name": "spaces/DMDEMO",
+      "spaceType": "DIRECT_MESSAGE"
+    },
+    "buttonClickedPayload": {}
+  }
+}
