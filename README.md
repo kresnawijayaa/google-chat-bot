@@ -130,3 +130,5 @@ Ini fondasi simulasi, belum sertifikasi production/pentest. Belum ada integrasi 
 - https://developers.google.com/identity/protocols/oauth2/service-account
 
 Root vercel.json menonaktifkan deployment Git pada project yang masih menunjuk root repository. Dua layanan memakai konfigurasi Vercel masing-masing dalam subfolder. Project lama dapat diarahkan ke program-cuti bila ingin melanjutkan demo lama.
+
+Panduan langkah singkat dan asal environment variables: [docs/setup-vercel.md](docs/setup-vercel.md).
