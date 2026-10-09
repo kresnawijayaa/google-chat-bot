@@ -42,3 +42,7 @@ Tes memakai Google mock. Uji callback Google nyata dilakukan setelah domain dan 
 ## Melihat alur development
 
 Tambahkan DEBUG_FLOW=true pada kedua project dan redeploy. Buka tab Logs untuk melihat request/payload/hasil. Petunjuk membaca log: [debug-flow.md](debug-flow.md).
+
+## Aktifkan API untuk program lain
+
+Tambahkan APP_CLIENTS_JSON pada project gchat-hub, lalu redeploy hub. Nilai contoh dan cara memberi credential per program: [integrasi-aplikasi.md](integrasi-aplikasi.md). Gateway dan schema Neon tidak perlu diubah.

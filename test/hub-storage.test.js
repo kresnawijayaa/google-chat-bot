@@ -94,3 +94,24 @@ test("NIK registration survives instances, rejects unauthorized users and consum
     assert.equal(await second.registerByNik("001234", user), false);
   } finally { await db.close(); }
 });
+
+test("PostgreSQL application approval insert is atomic and stores source identity",async()=>{
+ const {PGlite}=localRequire("@electric-sql/pglite");
+ const db=new PGlite();
+ const adapter={query:async(q,p)=>(await db.query(q,p)).rows};
+ const store=loadStore({DATABASE_URL:"postgresql://test:test@localhost/test"},adapter);
+ try {
+  await db.exec(fs.readFileSync(path.join(root,"db/schema.sql"),"utf8"));
+  await store.setUser("approver@example.com",{email:"approver@example.com",nik:"00042",dmSpace:"spaces/dm"});
+  assert.equal((await store.getUserByNik("00042")).email,"approver@example.com");
+  assert.equal(await store.getUserByNik("999"),undefined);
+  const approval={id:"APR-source",approverEmail:"approver@example.com",status:"PENDING",deliveryStatus:"SENDING",clientId:"cuti",sourceRequestId:"CUTI-001"};
+  const inserted=await Promise.all([store.createApproval(approval.id,approval),store.createApproval(approval.id,approval)]);
+  assert.equal(inserted.filter(Boolean).length,1);
+  const record=await store.getApproval(approval.id);assert.equal(record.clientId,"cuti");assert.equal(record.sourceRequestId,"CUTI-001");
+  assert.equal(await store.getApproval("missing"),undefined);
+  await store.updateDelivery(approval.id,{deliveryStatus:"SENT"});
+  await store.decide(approval.id,approval.approverEmail,"approve");
+  assert.equal((await store.getApproval(approval.id)).status,"APPROVED");
+ } finally {await db.close();}
+});

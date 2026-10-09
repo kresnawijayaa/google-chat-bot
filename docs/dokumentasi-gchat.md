@@ -70,6 +70,7 @@ Registrasi mengikuti Google → gateway → hub → Neon. Balasan registrasi dan
 | --- | --- | --- | --- |
 | ADMIN_PASSWORD | Pengelola | Basic login admin hub | Sampai diganti |
 | BRIDGE_SECRET | Pengelola, nilai acak | Login hub dan signature JWT kedua layanan | Sampai diganti |
+| JWT aplikasi | Hub setelah login client aplikasi | Program sumber → API hub | 600 detik |
 | JWT gateway | Gateway setelah login | Hub → transport gateway | 600 detik |
 | Assertion Google | Hub, private key JSON | Ditukar dengan Google access token | exp 3.600 detik setelah dibuat |
 | Google access token | Google OAuth | Gateway → Google Chat API | expires_in Google |
@@ -139,6 +140,9 @@ HTTP Basic menggunakan ADMIN_USERNAME (default admin) dan ADMIN_PASSWORD minimal
 | POST /users/delete | Basic admin + token konfirmasi | Redirect 303 |
 | GET /approvals | Basic admin | HTML riwayat/filter/paginasi |
 | POST /internal/google-chat | Bearer JWT relay | JSON respons event |
+| POST /auth/token | client_id/client_secret aplikasi | JWT aplikasi |
+| POST /api/approvals | Bearer JWT aplikasi | JSON pengajuan baru/duplikat |
+| GET /api/approvals/:id | Bearer JWT aplikasi | JSON status milik aplikasi |
 
 ### Gateway
 
@@ -153,7 +157,7 @@ HTTP Basic menggunakan ADMIN_USERNAME (default admin) dan ADMIN_PASSWORD minimal
 
 Login tidak membutuhkan Bearer tetapi membutuhkan credential valid. JWT transport gateway tidak diterima pada endpoint internal hub.
 
-Tidak ada login/token pada hub, API multi-aplikasi atau polling/ACK keputusan pada demo saat ini. Halaman pengguna/approval mengembalikan HTML, bukan REST API JSON.
+API aplikasi kini tersedia: login, kirim dan cek status per ID. Panduan: [integrasi-aplikasi.md](integrasi-aplikasi.md). Program sumber melakukan polling sendiri; belum ada ACK/webhook. Halaman admin tetap HTML.
 
 JSON request dibatasi 128 KB. Error parsing/ukuran memakai handler error saat ini, bukan kontrak response 413 khusus.
 
@@ -838,6 +842,7 @@ Lokal tanpa DATABASE_URL memakai Map dan hilang saat restart. Vercel wajib DATAB
 | DATABASE_URL | Connection string Neon |
 | GOOGLE_SERVICE_ACCOUNT_JSON | Satu JSON lengkap pengirim bot |
 | ADMIN_PASSWORD | Password admin minimal 12 karakter |
+| APP_CLIENTS_JSON | Opsional, registry credential aplikasi lain; [] menonaktifkan API |
 | DEBUG_FLOW | true untuk debug; default nonaktif |
 | ADMIN_USERNAME | Opsional, default admin |
 | REGISTRATION_COMMAND_ID | Opsional, default 1 |
@@ -900,7 +905,7 @@ Contoh ilustratif:
 | RELAY_TOKEN_CREATE / CHAT_EVENT | Penerusan dan tipe event |
 | STORE_CALL / STORE_RESULT | Operasi data dan input/output |
 | HTTP_OUT / HTTP_ABORTED | Respons/koneksi putus |
-| FETCH_ERROR / STORE_ERROR / RELAY_ERROR / REQUEST_ERROR / APPROVAL_ERROR | Kegagalan |
+| FETCH_ERROR / STORE_ERROR / RELAY_ERROR / REQUEST_ERROR / APPROVAL_ERROR / APPLICATION_APPROVAL_ERROR | Kegagalan |
 
 Store log bukan dump SQL/traffic Neon. HTTP internal library verifikasi Google tidak dilog; hasil verifikasinya dicatat.
 
@@ -985,7 +990,7 @@ Template callback JSON tidak bisa dipanggil memakai JWT gateway pada /google-cha
 
 Fitur: registrasi NIK, kirim melalui gateway/token, keputusan atomik, admin pengguna/hapus, riwayat dan debug.
 
-Belum: integrasi program-cuti/sistem kantor, API multi-client, polling/ACK, antrian, pencabutan JWT per sesi, rate limiting terdistribusi, retry dan sinkronisasi ulang seluruh kegagalan. Ini cakupan kode, bukan hasil audit production/pentest.
+Belum: pemasangan client pada program-cuti/sistem kantor, scheduler polling terpusat/ACK/webhook, antrian, pencabutan JWT per sesi, rate limiting terdistribusi, retry dan sinkronisasi ulang seluruh kegagalan. Ini cakupan kode, bukan hasil audit production/pentest.
 
 ~~~powershell
 npm install --prefix gchat-hub
@@ -993,7 +998,7 @@ npm install --prefix integration-gateway
 npm test
 ~~~
 
-Enam tes mencakup penyamaran credential, debug nonaktif, PostgreSQL PGlite, registrasi, alur dua layanan dengan Google mock, keputusan dan penolakan autentikasi. Tidak ada pengiriman Google nyata dalam tes.
+Sepuluh tes mencakup penyamaran credential, debug nonaktif, PostgreSQL PGlite, registrasi, alur gateway/Google mock, API aplikasi, kepemilikan record, retry idempotent, kegagalan pengiriman dan keputusan. Tidak ada pengiriman Google nyata dalam tes.
 
 Kode:
 
@@ -1010,3 +1015,7 @@ Referensi resmi:
 - [Identitas add-on](https://developers.google.com/workspace/add-ons/chat/convert).
 
 Dokumentasi mengikuti kode repository; tidak seluruh kemampuan Google pada referensi diimplementasikan.
+
+## API aplikasi sumber
+
+[Kontrak lengkap, payload, error dan contoh kode](integrasi-aplikasi.md). Endpoint API menggunakan JWT aplikasi terpisah dari token transport gateway/relay. Metadata clientId, sourceRequestId, requestFingerprint dan approverNik disimpan pada JSON approval tanpa perubahan schema SQL. requestId stabil membuat retry tidak mengirim kartu ganda. ID API dibentuk dari client + requestId; ID demo form tetap UUID.

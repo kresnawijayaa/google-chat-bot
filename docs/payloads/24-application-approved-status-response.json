@@ -1,0 +1,12 @@
+{
+  "id": "APR-0123456789abcdef0123456789abcdef",
+  "requestId": "CUTI-2026-001",
+  "approverNik": "00123456",
+  "approverEmail": "atasan@example.com",
+  "status": "APPROVED",
+  "deliveryStatus": "SENT",
+  "createdAt": "2026-10-09T07:00:00.000Z",
+  "sentAt": "2026-10-09T07:00:01.000Z",
+  "decidedAt": "2026-10-09T07:05:00.000Z",
+  "decidedBy": "atasan@example.com"
+}

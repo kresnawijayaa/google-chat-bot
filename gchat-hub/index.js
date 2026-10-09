@@ -2,6 +2,7 @@ const express = require("express");
 const { createDebug } = require("./debug");
 const { createGoogleTransport } = require("./google-transport");
 const { createAuth } = require("./auth");
+const { registerApplicationApi } = require("./api");
 const { randomUUID } = require("node:crypto");
 
 const { registerMonitoringPages, escape: escapeHtml } = require("./pages");
@@ -49,6 +50,7 @@ app.get("/", (req, res) => {
   res.send("GChat Hub is running");
 });
 
+registerApplicationApi(app, {env, store, chat, createApprovalMessage, debug});
 registerMonitoringPages(app, store, env);
 
 // ==============================
@@ -529,8 +531,7 @@ function createApprovalResultMessage(
                   decoratedText: {
                     topLabel:
                       "Pemohon",
-                    text:
-                      approval.employeeName,
+                    text: escapeHtml(approval.employeeName),
                   },
                 },
 
@@ -538,8 +539,7 @@ function createApprovalResultMessage(
                   decoratedText: {
                     topLabel:
                       "Jenis",
-                    text:
-                      approval.type,
+                    text: escapeHtml(approval.type),
                   },
                 },
 
@@ -547,8 +547,7 @@ function createApprovalResultMessage(
                   decoratedText: {
                     topLabel:
                       "Tanggal",
-                    text:
-                      approval.date,
+                    text: escapeHtml(approval.date),
                   },
                 },
 
@@ -556,8 +555,7 @@ function createApprovalResultMessage(
                   decoratedText: {
                     topLabel:
                       "Diproses oleh",
-                    text:
-                      approval.approvedBy,
+                    text: escapeHtml(approval.approvedBy),
                   },
                 },
 

@@ -9,6 +9,10 @@ function createDebug({ env = process.env, service, sink = line => console.log(li
     const key = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_JSON || "{}").private_key;
     if (key) knownSecrets.push(key);
   } catch {}
+  try {
+    const clients = JSON.parse(env.APP_CLIENTS_JSON || "[]");
+    if (Array.isArray(clients)) for (const client of clients) if (typeof client?.secret === "string" && client.secret.length >= 8) knownSecrets.push(client.secret);
+  } catch {}
   function cleanString(value) {
     let text = String(value);
     for (const secret of knownSecrets) text = text.split(secret).join("[REDACTED]");

@@ -26,3 +26,16 @@ Lihat [dokumentasi lengkap](../dokumentasi-gchat.md) untuk endpoint, header, sta
 | [18-approval-pending-data.json](18-approval-pending-data.json) | Contoh bot_approvals.data PENDING dengan SENT |
 | [19-approval-approved-data.json](19-approval-approved-data.json) | Contoh bot_approvals.data APPROVED |
 | [20-approval-declined-data.json](20-approval-declined-data.json) | Contoh bot_approvals.data DECLINED |
+
+## API aplikasi sumber
+
+Contoh berikut ilustratif dengan placeholder ID/timestamp, mengikuti kontrak API baru. Panduan: [integrasi-aplikasi.md](../integrasi-aplikasi.md).
+
+| File | Keterangan |
+| --- | --- |
+| [21-application-login-request.json](21-application-login-request.json) | application login request |
+| [22-application-approval-request.json](22-application-approval-request.json) | application approval request |
+| [23-application-created-response.json](23-application-created-response.json) | application created response |
+| [24-application-approved-status-response.json](24-application-approved-status-response.json) | application approved status response |
+| [25-application-duplicate-response.json](25-application-duplicate-response.json) | application duplicate response |
+| [26-application-delivery-error-response.json](26-application-delivery-error-response.json) | application delivery error response |

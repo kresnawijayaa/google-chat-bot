@@ -46,3 +46,5 @@ Preview dibatasi: string 12.000 karakter, respons fetch 20.000 byte, array/objek
 Log tidak disimpan di Neon dan tidak tersedia melalui endpoint publik. Matikan debug dengan DEBUG_FLOW=false lalu redeploy saat selesai mencoba.
 
 Referensi Vercel: https://vercel.com/docs/logs/runtime
+
+API aplikasi juga menghasilkan LOGIN_SUCCESS, SERVICE_TOKEN_VERIFIED, STORE_CALL/RESULT dan FETCH_SEND/RESULT. Kegagalan pengiriman dari API dicatat sebagai APPLICATION_APPROVAL_ERROR dengan id/clientId.

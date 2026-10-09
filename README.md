@@ -31,10 +31,12 @@ Node 22+. Jalankan npm install --prefix gchat-hub dan npm install --prefix integ
 
 Port default hub 3001, gateway 3002. Untuk transport lokal gunakan GATEWAY_URL=http://localhost:3002 dan HUB_URL=http://localhost:3001. Kartu nyata memerlukan URL callback HTTPS; gunakan deployment Vercel untuk mencoba Google Chat.
 
-.env lokal tidak masuk Git dan tidak otomatis menjadi env Vercel. Program-cuti belum terhubung; API banyak aplikasi dan ACK ditunda.
+.env lokal tidak masuk Git dan tidak otomatis menjadi env Vercel. Program-cuti lama belum terhubung. API login/kirim/cek status aplikasi sudah tersedia; polling dilakukan program pemanggil, tanpa ACK.
 
 Root vercel.json menonaktifkan deployment Git project lama yang menunjuk root repository. Project baru memakai konfigurasi subfolder.
 
 Mode debug development: [docs/debug-flow.md](docs/debug-flow.md). Aktifkan DEBUG_FLOW=true di kedua layanan untuk melihat payload, endpoint, hasil dan operasi database dengan credential disamarkan.
 
 Dokumentasi teknis lengkap dan contoh payload: [docs/dokumentasi-gchat.md](docs/dokumentasi-gchat.md). File JSON terpisah: [docs/payloads](docs/payloads/README.md).
+
+Panduan developer program lain: [docs/integrasi-aplikasi.md](docs/integrasi-aplikasi.md). Tambahkan APP_CLIENTS_JSON pada hub dan redeploy untuk mengaktifkan API. Contoh Node.js: [examples/hub-client.cjs](examples/hub-client.cjs).

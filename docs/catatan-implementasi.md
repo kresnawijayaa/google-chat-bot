@@ -109,3 +109,13 @@ Demo memakai satu BRIDGE_SECRET yang sama di dua layanan; audience token transpo
 Bagian 1–3 mencatat demo lama. Verifikasi Google kini tersedia pada gateway baru. Tes simulasi lulus; callback nyata perlu dicoba setelah URL dan identitas add-on dikonfigurasi.
 
 Panduan: [setup-vercel.md](setup-vercel.md).
+
+## 5. API integrasi aplikasi — 9 Oktober 2026
+
+Hub menyediakan POST /auth/token, POST /api/approvals dan GET /api/approvals/:id. Setiap aplikasi mendapat client_id/secret sendiri melalui APP_CLIENTS_JSON. Program sumber tidak menerima key Google atau BRIDGE_SECRET.
+
+Pengajuan dikirim dengan requestId stabil, NIK approver, nama pemohon, jenis, tanggal dan alasan. Hub mencari registrasi DM berdasarkan NIK, menyimpan kepemilikan aplikasi dan mengirim lewat gateway yang sama. Retry data sama memakai record lama; payload berbeda dengan requestId sama ditolak 409.
+
+Program sumber mengambil status per ID menggunakan tokennya dan hanya dapat membaca record miliknya. Program sumber menerapkan keputusan ke database sendiri; tidak ada webhook atau ACK pada tahap ini. Program-cuti lama belum dimodifikasi untuk memanggil API.
+
+Panduan developer: [integrasi-aplikasi.md](integrasi-aplikasi.md).

@@ -1,0 +1,13 @@
+{
+  "error": "Approval delivery could not be confirmed",
+  "id": "APR-0123456789abcdef0123456789abcdef",
+  "requestId": "CUTI-2026-001",
+  "approverNik": "00123456",
+  "approverEmail": "atasan@example.com",
+  "status": "PENDING",
+  "deliveryStatus": "FAILED",
+  "createdAt": "2026-10-09T07:00:00.000Z",
+  "sentAt": null,
+  "decidedAt": null,
+  "decidedBy": null
+}

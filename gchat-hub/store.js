@@ -57,6 +57,18 @@ module.exports = {
     if (!sql) return users.get(email);
     return (await sql.query("SELECT data FROM bot_users WHERE email = $1", [email]))[0]?.data;
   },
+  async getUserByNik(nik) {
+    if (!sql) return [...users.values()].find(user => user.nik === nik);
+    return (await sql.query("SELECT data FROM bot_users WHERE data->>'nik' = $1", [nik]))[0]?.data;
+  },
+  async getApproval(id) {
+    if (!sql) return approvals.get(id);
+    return (await sql.query("SELECT data FROM bot_approvals WHERE id = $1", [id]))[0]?.data;
+  },
+  async createApproval(id, approval) {
+    if (!sql) { if (approvals.has(id)) return false; approvals.set(id, approval); return true; }
+    return (await sql.query("INSERT INTO bot_approvals (id, approver_email, status, data) VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT (id) DO NOTHING RETURNING id", [id, approval.approverEmail, approval.status, JSON.stringify(approval)])).length > 0;
+  },
   async deleteUser(email) {
     if (!sql) return users.delete(email);
     return (await sql.query("DELETE FROM bot_users WHERE email = $1 RETURNING email", [email])).length > 0;
