@@ -1,87 +1,132 @@
-# Google Chat Approval Bot — Vercel + Neon PostgreSQL
+# GChat Integration Workspace
 
-Aplikasi Express menerima event Google Workspace add-on (event.chat). index.js mengekspor aplikasi untuk Vercel dan tetap bisa dijalankan lokal dengan npm start.
+Tiga aplikasi terpisah dalam satu repository. Tidak ada kredensial yang dibagikan ke repository.
 
-## Mengapa perlu database
+| Folder | Peran |
+| --- | --- |
+| program-cuti | Aplikasi/demo sebelumnya, dipertahankan tanpa perubahan pada tahap ini |
+| gchat-hub | Registrasi, database, kartu approval, kepemilikan pengajuan dan keputusan |
+| integration-gateway | Verifikasi callback Google dan transport HTTPS ke/dari Google; tanpa database bisnis |
 
-Registrasi pengguna dan approval harus tersedia untuk setiap instance Vercel serta tetap tersimpan sesudah redeploy. Aplikasi menggunakan Neon PostgreSQL. Tidak membutuhkan Upstash atau Redis.
+## Alur
 
-## Setup Neon
+Program sumber → login gchat-hub → kirim pengajuan ke hub → hub login gateway → gateway meneruskan pengiriman ke Google.
 
-1. Buat project Neon di https://console.neon.tech.
-2. Buka SQL Editor pada branch/database yang akan dipakai dan jalankan seluruh db/schema.sql. Script membuat bot_users dan bot_approvals serta aman dijalankan ulang tanpa menghapus data.
-3. Klik Connect dan salin connection string PostgreSQL. Simpan sebagai DATABASE_URL di Vercel, dengan parameter TLS (sslmode=require) dari Neon tetap utuh. Jangan masukkan connection string ke repository atau chat.
-4. Pisahkan database/branch Neon untuk Production dan Preview agar data pengujian tidak tercampur.
+Google → callback gateway dengan ID token Google → gateway memverifikasi token → gateway login hub → hub memproses event → respons hub dikembalikan gateway ke Google.
 
-## Setup deployment lewat push
+Program sumber mengambil keputusan dari hub memakai tokennya, menerapkan aturan bisnis, lalu mengirim acknowledgment. Tidak ada polling antrean di gateway; kedua layanan akan ditempatkan di Vercel dan saling memanggil langsung. Program cuti belum diintegrasikan dengan API baru.
 
-1. Buat repository Git dan push project ke GitHub. File credentials bot-chat-511003-80064b86bc1b.json sudah diabaikan oleh Git dan Vercel; jangan upload file tersebut.
-2. Di Vercel, pilih Add New > Project dan import repository. vercel.json menetapkan index.js sebagai fungsi Node dan mengarahkan semua request ke Express. Jangan set Output Directory ke root project; konfigurasi builds di source menentukan output deployment.
-3. Isi environment variables pada Settings > Environment Variables:
-   - DATABASE_URL: connection string Neon.
-   - PUBLIC_BASE_URL: https://nama-project.vercel.app, domain Production stabil tanpa /google-chat.
-   - GOOGLE_SERVICE_ACCOUNT_JSON: seluruh isi JSON service account dari kurung { sampai }, tanpa tambahan tanda kutip. Pertahankan escape backslash-n dalam private_key sebagaimana pada file asli.
-4. Hapus UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, dan STORAGE_PREFIX dari Vercel jika sempat ditambahkan; kode tidak memakainya lagi.
-5. Deploy atau redeploy setelah environment variables diubah. Vercel wajib memiliki DATABASE_URL. Tabel harus sudah dibuat pada database yang ditunjuk connection string.
-6. Ubah endpoint HTTP konfigurasi/deployment Google Workspace add-on ke https://nama-project.vercel.app/google-chat. Pastikan Google bisa mengakses endpoint tanpa halaman login Vercel Deployment Protection.
-7. Isi allowed_users lalu kirim /regist di DM bot dan masukkan NIK untuk registrasi. Buka https://nama-project.vercel.app/approval-demo, kirim kartu baru, lalu klik Approve/Decline. Pantau Vercel Runtime Logs.
+## Local development
 
-Setelah repository terhubung ke Vercel, push ke branch Production memicu deployment otomatis. Kartu lama menyimpan callback lama; kirim kartu baru setelah pindah domain. Data memory lokal atau Redis sebelumnya tidak otomatis dimigrasikan.
+Node.js 22 atau lebih baru (diuji dengan Node 24).
 
-## Penyimpanan dan verifikasi
+1. npm install --prefix gchat-hub
+2. npm install --prefix integration-gateway
+3. Salin .env.example masing-masing aplikasi ke .env dan isi konfigurasinya.
+4. Untuk lokal: hub memakai PORT=3001 dan HUB_PUBLIC_URL=http://localhost:3001; gateway memakai PORT=3002, HUB_URL=http://localhost:3001; hub memakai GATEWAY_URL=http://localhost:3002. GATEWAY_PUBLIC_URL tetap URL HTTPS callback nyata saat mengirim kartu Google, bukan localhost.
+5. Jalankan npm run start:hub dan npm run start:gateway pada terminal terpisah.
+6. npm test pada root menjalankan tes dua service dan PostgreSQL lokal. Tes tidak mengirim pesan Google nyata.
 
-bot_users menyimpan registrasi. bot_approvals menyimpan data pengajuan, approver, dan status. Semua query memakai parameter. Keputusan menggunakan UPDATE bersyarat status PENDING dan approver yang cocok, sehingga hanya satu keputusan berhasil meskipun dua request datang bersamaan. Data tidak dihapus otomatis.
+## Deployment Vercel
 
-Lokal tanpa DATABASE_URL masih menggunakan memory yang hilang saat restart. Untuk menggunakan Neon secara lokal, set DATABASE_URL sebagai environment variable PowerShell sebelum npm start. File .env.example hanya contoh; aplikasi tidak memuat .env otomatis. GOOGLE_APPLICATION_CREDENTIALS dengan path file masih tersedia untuk credentials lokal.
+Buat dua project Vercel dari repository ini:
 
-Jalankan npm test. Tes mencakup alur HTTP, pengiriman kartu dengan Chat API mock, approver salah, keputusan bersamaan, serta schema dan query SQL yang dieksekusi pada PostgreSQL lokal PGlite. Koneksi Neon, deployment Vercel, dan klik nyata Google Chat perlu diuji setelah konfigurasi tersedia.
+- Project gchat-hub: Root Directory = gchat-hub.
+- Project integration-gateway: Root Directory = integration-gateway.
 
-## Batasan demo publik
+Jangan deploy seluruh repository root sebagai website statis. Konfigurasi fungsi Node sudah tersedia pada vercel.json di masing-masing folder. Gunakan Node 22+ dan domain Production yang stabil. Endpoint service-to-service harus bisa dijangkau tanpa halaman login Vercel Deployment Protection; autentikasi aplikasi tetap diwajibkan oleh kode.
 
-/google-chat belum memverifikasi token Google; email dalam payload saja bukan autentikasi. /approval-demo dan /send-approval belum memiliki login. Tambahkan autentikasi sebelum memakai data nyata.
+Isi environment variables sesuai .env.example masing-masing folder. Tidak ada secret default. TOKEN_SECRET dan credentials client minimal 32 karakter acak. Buat setiap secret secara terpisah dan simpan lewat pengaturan Environment Variables Vercel. Untuk menghasilkan satu nilai acak lokal: node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))".
+
+### Pasangan konfigurasi antar-service
+
+| Hub | Gateway | Keterangan |
+| --- | --- | --- |
+| GATEWAY_CLIENT_SECRET | HUB_CLIENT_SECRET | Nilai sama; login hub ke gateway |
+| GATEWAY_RELAY_SECRET | HUB_RELAY_CLIENT_SECRET | Nilai sama; login gateway ke hub |
+| GATEWAY_CLIENT_ID=gchat-hub | HUB_CLIENT_ID=gchat-hub | Identitas hub |
+| Identitas relay tetap integration-gateway | HUB_RELAY_CLIENT_ID=integration-gateway | Identitas gateway |
+| GATEWAY_URL | Domain gateway | Origin HTTPS, tanpa path |
+| GATEWAY_PUBLIC_URL | Domain gateway | URL untuk action.function pada kartu |
+| HUB_PUBLIC_URL | HUB_URL | Domain hub yang sama |
+
+TOKEN_SECRET masing-masing layanan harus berbeda. Key JWT milik hub bukan key JWT gateway. Google ID token juga tidak diterima sebagai token aplikasi hub.
+
+### Konfigurasi Google
+
+- Hub: GOOGLE_SERVICE_ACCOUNT_JSON berisi JSON lengkap service account pengirim bot. Private key hanya disimpan di hub.
+- Gateway: GOOGLE_CALLBACK_AUDIENCE = https://DOMAIN-GATEWAY/google-chat.
+- Gateway: GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL = email identitas add-on yang ditunjukkan konfigurasi Google Chat/Workspace add-on. Ini bukan otomatis client_email JSON pengirim bot.
+- Di Google Chat API, arahkan common endpoint dan App command trigger ke https://DOMAIN-GATEWAY/google-chat. Command /regist memakai ID 1.
+- Avatar URL: https://DOMAIN-GATEWAY/profile-picture-bot.jpeg.
+- Endpoint Google menolak token hilang, kedaluwarsa, signature/audience salah, serta identitas add-on yang tidak cocok. Verifikasi dilakukan dengan OAuth2Client Google.
+- Endpoint /google-chat berada di gateway; hub hanya menerima /internal/google-chat dengan token khusus role gateway.
+
+### Database hub
+
+DATABASE_URL hanya berada di hub. Gunakan database pengujian atau branch Neon terpisah ketika mencoba arsitektur baru. Jalankan gchat-hub/db/schema.sql di SQL Editor pada database target. Seluruh schema mendukung CREATE IF NOT EXISTS dan tidak menghapus data.
+
+Registrasi: isi allowed_users, jalankan /regist lalu kirim NIK. bot_users, bot_approvals, dan sesi NIK disimpan oleh hub. Gateway tidak memiliki DATABASE_URL dan tidak menyimpan keputusan.
+
+### Aplikasi pemanggil
+
+INTEGRATION_CLIENTS_JSON pada hub berisi array client, contoh format:
+
+```json
+[{"id":"program-cuti","secret":"ISI_DENGAN_SECRET_ACAK_MINIMAL_32_KARAKTER"}]
+```
+
+Setiap aplikasi memperoleh secret berbeda. ID integration-gateway dicadangkan untuk relay dan tidak boleh dipakai aplikasi sumber. Identitas aplikasi ditentukan dari token, bukan request body.
+
+## API aplikasi sumber
+
+Login:
+
+```http
+POST /auth/token
+Content-Type: application/json
+
+{"client_id":"program-cuti","client_secret":"SECRET_APLIKASI"}
+```
+
+Respons access_token berlaku 600 detik. Request berikutnya mengirim Authorization: Bearer TOKEN. Program menyimpan secret di server, bukan browser pengguna.
+
+Pengajuan:
+
+```json
+{
+  "requestId": "CUTI-2026-001",
+  "approverNik": "00123456",
+  "employeeName": "Budi Santoso",
+  "type": "Cuti",
+  "date": "12–13 Oktober 2026",
+  "reason": "Keperluan keluarga"
+}
+```
+
+| Endpoint hub | Peran |
+| --- | --- |
+| POST /api/approvals | Mengirim pengajuan; approver harus sudah registrasi NIK |
+| GET /api/approvals/:id | Membaca pengajuan milik aplikasi pemanggil |
+| GET /api/decisions | Mengambil maksimal 100 keputusan yang belum diakui aplikasi pemanggil |
+| POST /api/decisions/:id/ack | Konfirmasi keputusan sudah diterapkan; aman dipanggil ulang |
+
+Pasangan client_id + requestId menentukan ID pengajuan. Pengiriman ulang data identik mengembalikan record yang sama tanpa mengirim kartu kedua. Data berbeda dengan requestId sama ditolak 409. Record dengan deliveryStatus FAILED/SENDING tidak otomatis dikirim ulang; pemulihan pengiriman masih menjadi pekerjaan lanjutan.
+
+Status keputusan APPROVED/DECLINED terpisah dari syncStatus AWAITING_ACK/ACKNOWLEDGED. ACK hanya mencatat laporan program sumber; hub tidak memverifikasi update database program sumber. Integrasi dan aturan cuti tetap milik program sumber.
+
+## Admin hub
+
+/users, /approvals, /approval-demo dan /send-approval dilindungi login Basic admin lewat HTTPS. ADMIN_PASSWORD minimal 12 karakter; tanpa konfigurasi halaman tertutup. Halaman kirim demo juga memeriksa Origin sesuai HUB_PUBLIC_URL. Penghapusan pengguna tetap memerlukan token konfirmasi; tidak menghapus riwayat.
+
+## Batasan tahap pertama
+
+Ini fondasi simulasi, belum sertifikasi production/pentest. Belum ada integrasi program-cuti, pencabutan token per sesi, rate limiting terdistribusi, retry otomatis pengiriman, atau sinkronisasi pembaruan kartu sesudah ACK. Token aplikasi berlaku singkat dan registry client berasal dari environment variables. Tidak ada endpoint proxy URL bebas; gateway hanya memanggil OAuth token endpoint dan Chat messages endpoint Google yang ditetapkan di kode. Semua callback Google diteruskan sinkron; hub perlu tersedia dan merespons cepat.
 
 ## Referensi
 
-- https://vercel.com/docs/frameworks/backend/express
-- https://neon.com/docs/connect/connect-from-any-app
-- https://github.com/neondatabase/serverless
+- https://developers.google.com/workspace/add-ons/guides/alternate-runtimes#validate_json_requests
 - https://developers.google.com/workspace/add-ons/chat/convert
+- https://developers.google.com/identity/protocols/oauth2/service-account
 
-## Halaman monitoring
-
-- /users: daftar pengguna, pencarian nama/email, ruang DM, dan waktu interaksi.
-- /approvals: riwayat pengajuan dengan filter status/approver, pencarian, dan pagination 25 baris.
-- DECLINED ditampilkan sebagai Rejected. Status pengiriman dicatat terpisah (SENT, FAILED, SENDING); SENT bukan tanda pesan telah dibaca. Data lama yang belum memiliki metadata pengiriman ditampilkan apa adanya.
-- Halaman mengambil data dari tabel yang sudah ada; tidak membutuhkan perubahan schema.
-- /users dan /approvals memerlukan HTTP Basic login melalui HTTPS. Atur ADMIN_PASSWORD minimal 12 karakter di Vercel (password acak yang kuat), ADMIN_USERNAME opsional (default admin), lalu redeploy. Browser akan menampilkan prompt login. Jika belum dikonfigurasi, kedua halaman tertutup dengan HTTP 503. Halaman demo lama masih mengikuti akses sebelumnya.
-
-### Hapus pengguna
-
-Di /users pilih Hapus pengguna, lalu konfirmasi pada halaman berikutnya. Penghapusan memerlukan login admin dan token konfirmasi yang berlaku 15 menit. Hanya registrasi pengguna yang dihapus; riwayat dan pengajuan yang telah dikirim tetap ada. Pengguna bisa terdaftar kembali melalui /regist dan validasi NIK di DM bot.
-
-## Registrasi dengan NIK
-
-Migrasi: npm run db:migrate-registration, atau jalankan db/registration.sql di Neon SQL Editor. Script memakai DATABASE_URL; pada lokal bisa membaca .env. Migrasi menambah allowed_users, bot_registration_sessions dan indeks NIK unik tanpa menghapus registrasi lama.
-
-Isi daftar izin pada Neon SQL Editor (ganti contoh dengan data yang benar):
-
-```sql
-INSERT INTO allowed_users (nik, email, display_name)
-VALUES ('00123456', 'nama@indomaret.com', 'Nama Karyawan')
-ON CONFLICT (nik) DO UPDATE
-SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, enabled = TRUE;
-```
-
-Email wajib huruf kecil. NIK harus cocok dengan email Workspace pengirim. enabled = FALSE menolak registrasi baru; tidak otomatis mencabut registrasi lama. NIK/email hanya dikelola di database saat ini, belum ada halaman admin whitelist.
-
-Google Chat API > Configuration > Commands > Add a command:
-- Command type: Slash command.
-- Name: /regist.
-- Command ID: 1 (atau sesuaikan environment REGISTRATION_COMMAND_ID).
-- Description: Daftar pengguna approval dengan NIK.
-- Triggers > App command: https://google-chat-bot-jade.vercel.app/google-chat, atau gunakan common HTTP endpoint yang sama.
-- Save konfigurasi.
-
-Alur pengguna: /regist → bot meminta NIK → kirim NIK saja → validasi allowed_users → pendaftaran berhasil. Teks regist juga diterima sebagai alternatif sebelum slash command dikonfigurasi. Pesan biasa dan klik tombol tidak lagi mendaftarkan pengguna. Pengguna lama tanpa NIK perlu /regist sebelum dipilih untuk pengiriman baru. Sesi berlaku 10 menit.
-
-Referensi command: https://developers.google.com/workspace/add-ons/chat/commands
+Root vercel.json menonaktifkan deployment Git pada project yang masih menunjuk root repository. Dua layanan memakai konfigurasi Vercel masing-masing dalam subfolder. Project lama dapat diarahkan ke program-cuti bila ingin melanjutkan demo lama.

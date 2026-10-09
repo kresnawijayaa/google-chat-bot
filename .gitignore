@@ -1,6 +1,7 @@
-bot-chat-511003-80064b86bc1b.json
-node_modules
-.env
-.vercel
-.env.*
-!.env.example
+**/node_modules/
+**/.env
+**/.env.*
+!**/.env.example
+**/.vercel/
+**/*service-account*.json
+**/bot-chat-511003-80064b86bc1b.json
