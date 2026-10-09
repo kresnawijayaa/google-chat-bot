@@ -1,56 +1,40 @@
-# Setup dua project Vercel
+# Setup demo di Vercel
 
-File lokal gchat-hub/.env dan integration-gateway/.env telah disiapkan. Secrets acak dan pasangan login antar-service sudah diisi. Database dan JSON service account lama berada hanya pada env hub. File .env tidak ikut Git.
+Buat **dua project** dari repo yang sama. Root Directory: gchat-hub pada project pertama dan integration-gateway pada project kedua.
 
-## 1. Buat dua project
+## Env gchat-hub
 
-Import repository google-chat-bot dua kali lewat Add New > Project:
-
-| Project | Root Directory |
+| Nama | Isi dari mana |
 | --- | --- |
-| gchat-hub | gchat-hub |
-| integration-gateway | integration-gateway |
+| GATEWAY_URL | URL production integration-gateway |
+| BRIDGE_SECRET | Satu nilai acak minimal 32 karakter; sama dengan gateway |
+| DATABASE_URL | Connection string Neon yang sudah digunakan |
+| GOOGLE_SERVICE_ACCOUNT_JSON | Seluruh satu JSON service account pengirim bot yang sudah digunakan |
+| ADMIN_PASSWORD | Password halaman admin minimal 12 karakter |
 
-Gunakan Node.js 22+. Biarkan Build Command dan Output Directory mengikuti konfigurasi source. Tidak perlu memindahkan project ke dua repository. Untuk deployment awal hub, masukkan DATABASE_URL dari file lokal hub. Gateway bisa deploy awal tanpa konfigurasi, tetapi endpoint bisnisnya akan tertutup.
+## Env integration-gateway
 
-## 2. Isi alamat deployment di file lokal
+| Nama | Isi dari mana |
+| --- | --- |
+| HUB_URL | URL production gchat-hub |
+| PUBLIC_URL | URL production gateway ini sendiri |
+| BRIDGE_SECRET | Salin BRIDGE_SECRET hub persis sama |
+| GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL | Email Service account identitas add-on di Google Chat API Configuration; berbeda fungsi dari JSON pengirim |
 
-Sesudah mendapatkan domain Production kedua project, isi:
+Semua URL cukup domain HTTPS tanpa path, misalnya https://nama-gateway.vercel.app. PUBLIC_URL dan GATEWAY_URL berisi domain yang sama.
 
-Hub:
-- HUB_PUBLIC_URL = origin URL hub.
-- GATEWAY_URL = origin URL gateway.
-- GATEWAY_PUBLIC_URL = origin URL gateway yang sama.
+.env lokal sudah disiapkan dengan satu secret bersama dan credential lama. Lengkapi URL serta email add-on, lalu salin nilai ke Environment Variables masing-masing project Vercel. .env lokal tidak otomatis dibaca Vercel.
 
-Gateway:
-- HUB_URL = origin URL hub.
-- GOOGLE_CALLBACK_AUDIENCE = origin URL gateway ditambah /google-chat.
-- GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL = email identitas add-on dari Google Chat API Configuration, bagian Convert to Google Workspace add-on; bukan otomatis client_email JSON key pengirim.
+## Coba
 
-Contoh origin: https://nama-project.vercel.app (tanpa slash tambahan atau path).
+1. Redeploy kedua project sesudah env diisi.
+2. Google Chat API Configuration: arahkan endpoint dan trigger command ke **URL gateway + /google-chat**.
+3. DM bot: /regist lalu NIK yang diizinkan. Registrasi lama di Neon yang sama tetap tersimpan.
+4. Buka **URL hub + /approval-demo**, login username admin dan ADMIN_PASSWORD.
+5. Kirim approval, klik Approve/Decline, cek **URL hub + /approvals**.
 
-## 3. Masukkan env pada Vercel
+Login gateway berjalan otomatis di server; tidak perlu inject cookie. Request Google memakai token Google yang diverifikasi gateway.
 
-Di setiap project, buka Settings > Environment Variables. Masukkan isi .env milik project tersebut, dengan Import .env jika tersedia atau tambah key/value secara manual. Untuk manual, jangan ikut menyalin tanda kutip pembungkus .env. Pilih environment Production untuk simulasi. Jangan memasukkan env hub ke gateway atau sebaliknya.
+Schema: gchat-hub/db/schema.sql. Database lama yang sudah lengkap tidak perlu dibuat ulang.
 
-PORT hanya untuk lokal dan tidak perlu diisi pada Vercel. Secrets server tidak memakai prefix NEXT_PUBLIC_ atau VITE_. ADMIN_PASSWORD di file hub adalah password login halaman admin yang telah dibuat acak; ADMIN_USERNAME adalah admin. Jika diubah, tetap minimal 12 karakter.
-
-Redeploy kedua project setelah perubahan environment variables.
-
-## 4. Hubungkan Google
-
-Set common HTTP endpoint dan App command trigger ke URL gateway /google-chat. Gunakan /regist dengan Command ID 1. Avatar dapat memakai URL gateway /profile-picture-bot.jpeg. Uji /regist, pengiriman dari hub /approval-demo, dan klik kartu baru. Pantau Logs di kedua project.
-
-## Asal nilai env
-
-- DATABASE_URL: Neon; sudah memakai koneksi lama untuk simulasi.
-- GOOGLE_SERVICE_ACCOUNT_JSON: file JSON Google yang sudah ada; sudah diisi di hub.
-- URL: domain Production Vercel masing-masing project.
-- GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL: konfigurasi Google add-on.
-- TOKEN_SECRET: acak, berbeda untuk masing-masing layanan; sudah dibuat.
-- GATEWAY_CLIENT_SECRET hub = HUB_CLIENT_SECRET gateway: pasangan secret yang sudah dibuat.
-- GATEWAY_RELAY_SECRET hub = HUB_RELAY_CLIENT_SECRET gateway: pasangan berbeda yang sudah dibuat.
-- INTEGRATION_CLIENTS_JSON: credentials program sumber untuk login hub; secret program-cuti sudah dibuat, integrasi programnya belum dilakukan.
-- Identitas client, command ID, dan username admin: nilai tetap sesuai .env.example.
-
-Private key, database URL, dan semua secrets tidak perlu dikirim ke chat. File .env lokal tidak otomatis masuk ke environment deployment melalui Git.
+Tes memakai Google mock. Uji callback Google nyata dilakukan setelah domain dan identitas add-on diisi.

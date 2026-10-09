@@ -94,26 +94,3 @@ test("NIK registration survives instances, rejects unauthorized users and consum
     assert.equal(await second.registerByNik("001234", user), false);
   } finally { await db.close(); }
 });
-
-test("PostgreSQL stores app ownership, idempotent requests and decision acknowledgments",async()=>{
- const {PGlite}=localRequire("@electric-sql/pglite");const db=new PGlite();
- const adapter={query:async(q,p)=>(await db.query(q,p)).rows};const store=loadStore({DATABASE_URL:"postgresql://test:test@localhost/test"},adapter);
- try{
-  await db.exec(fs.readFileSync(path.join(root,"db/schema.sql"),"utf8"));
-  await store.setUser("approver@example.com",{email:"approver@example.com",nik:"00001"});
-  assert.equal((await store.getUserByNik("00001")).email,"approver@example.com");
-  const approval={id:"app-request",approverEmail:"approver@example.com",status:"PENDING",clientId:"cuti",syncStatus:"NOT_READY"};
-  const results=await Promise.all([store.createApproval(approval.id,approval),store.createApproval(approval.id,approval)]);
-  assert.equal(results.filter(Boolean).length,1);
-  assert.equal(await store.ackDecision(approval.id,"cuti"),false);
-  await store.decide(approval.id,"approver@example.com","approve");
-  assert.equal((await store.listPendingDecisions("cuti")).length,1);
-  assert.equal((await store.listPendingDecisions("other")).length,0);
-  assert.equal(await store.ackDecision(approval.id,"other"),false);
-  assert.equal(await store.ackDecision(approval.id,"cuti"),true);
-  const before=(await store.getApproval(approval.id)).acknowledgedAt;
-  assert.equal(await store.ackDecision(approval.id,"cuti"),true);
-  assert.equal((await store.getApproval(approval.id)).acknowledgedAt,before);
-  assert.equal((await store.listPendingDecisions("cuti")).length,0);
- }finally{await db.close();}
-});

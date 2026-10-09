@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { createServiceClient } = require("./service-client");
 function createGoogleTransport(env, fetchImpl = fetch) {
-  const gateway=createServiceClient({baseUrl:env.GATEWAY_URL,clientId:env.GATEWAY_CLIENT_ID || "gchat-hub",clientSecret:env.GATEWAY_CLIENT_SECRET,fetchImpl});
+  const gateway=createServiceClient({baseUrl:env.GATEWAY_URL,clientId:"gchat-hub",clientSecret:env.BRIDGE_SECRET,fetchImpl});
   let token, expires=0;
   async function googleToken() {
     if(token && expires>Date.now()) return token;

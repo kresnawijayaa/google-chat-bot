@@ -36,7 +36,9 @@ function registerMonitoringPages(app, store, env = process.env) {
   app.use(["/users", "/approvals", "/approval-demo", "/send-approval"], requireAdmin);
   app.post("/send-approval",(req,res,next)=>{
     const origin=req.get("Origin");
-    if(!origin || origin !== env.HUB_PUBLIC_URL) return res.status(403).send("Invalid form origin");
+    let sameHost = false;
+    try { const url = new URL(origin); sameHost = url.host === req.get("Host") && ["http:", "https:"].includes(url.protocol); } catch {}
+    if(!sameHost) return res.status(403).send("Invalid form origin");
     next();
   });
   function deleteToken(email, expires) {

@@ -94,12 +94,18 @@ Pencatatan alur ini bukan verifikasi keamanan production atau kelulusan pentest.
 - Penanganan kegagalan sinkronisasi ke program sumber atau pembaruan kartu.
 
 
-## 4. Pemisahan layanan — 9 Oktober 2026
+## 4. Simulasi sederhana dengan gateway — 9 Oktober 2026
 
-Arsitektur baru memakai gchat-hub sebagai layanan pusat dan integration-gateway sebagai gateway. Program-cuti sebelumnya dipertahankan tanpa modifikasi dan belum memanggil API hub. Kedua layanan baru akan berjalan sebagai project Vercel terpisah.
+Dua layanan Vercel: gchat-hub menjalankan demo lama, integration-gateway menjadi penerus komunikasi Google Chat. Program-cuti dibiarkan dan belum dihubungkan.
 
-Gchat-hub mengelola registrasi, database, pengajuan, keputusan dan key Google. Integration-gateway mengelola transport serta verifikasi token Google; tidak menyimpan data bisnis. Penempatan key pada hub menggantikan rencana awal key berada pada bridge di bagian 2.
+Fitur hub tetap: /regist + NIK, kirim dari halaman demo, Approve/Decline, daftar/hapus pengguna, riwayat. Neon dan key Google berada di hub, menggantikan rencana key pada bridge di bagian 2.
 
-Program sumber login ke hub dengan credentials aplikasi. Hub login ke gateway untuk transport keluar. Gateway memverifikasi Google ID token, lalu login ke hub untuk meneruskan callback. Setiap arah memiliki credentials yang berbeda. Keputusan tetap disampaikan kepada program sumber melalui API hub dan perlu ACK setelah diterapkan.
+Hub login otomatis ke POST /auth/token gateway memakai client_id gchat-hub dan BRIDGE_SECRET. Token Bearer berlaku 10 menit untuk transport Google. Tidak perlu cookie.
 
-Bagian 1–3 di atas mencatat implementasi demo sebelumnya. Pada layanan baru, endpoint Google berada di gateway dan hub hanya menerima event dengan token relay terautentikasi. Verifikasi Google sudah tersedia dalam kode baru; callback Google nyata belum diuji sampai konfigurasi identitas add-on dan domain tersedia.
+Google mengirim registrasi/klik ke /google-chat gateway. Gateway memverifikasi signature, audience, expiry dan identitas add-on pada Google ID token, kemudian meneruskan ke /internal/google-chat hub dengan token relay 1 menit. Hub memverifikasi relay dan memproses event; gateway mengembalikan respons ke Google.
+
+Demo memakai satu BRIDGE_SECRET yang sama di dua layanan; audience token transport dan relay berbeda. Konfigurasi banyak client/secret, API aplikasi sumber, polling keputusan dan ACK tidak digunakan pada tahap ini.
+
+Bagian 1–3 mencatat demo lama. Verifikasi Google kini tersedia pada gateway baru. Tes simulasi lulus; callback nyata perlu dicoba setelah URL dan identitas add-on dikonfigurasi.
+
+Panduan: [setup-vercel.md](setup-vercel.md).

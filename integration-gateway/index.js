@@ -1,29 +1,40 @@
 const express = require("express");
 const { OAuth2Client } = require("google-auth-library");
 const { createAuth } = require("./auth");
-const { createServiceClient } = require("./service-client");
+const jwt = require("jsonwebtoken");
 function createApp({ env = process.env, fetchImpl = fetch, verifyGoogleToken } = {}) {
   const app = express();
   app.use(express.json({limit:"128kb"}));
-  const auth = createAuth({secret:env.TOKEN_SECRET,issuer:"integration-gateway",audience:"integration-gateway-api",clients:()=>[{id:env.HUB_CLIENT_ID || "gchat-hub",secret:env.HUB_CLIENT_SECRET,role:"hub"}]});
-  const hub = createServiceClient({baseUrl:env.HUB_URL,clientId:env.HUB_RELAY_CLIENT_ID || "integration-gateway",clientSecret:env.HUB_RELAY_CLIENT_SECRET,fetchImpl});
+  const auth = createAuth({secret:env.BRIDGE_SECRET,issuer:"integration-gateway",audience:"integration-gateway-api",clients:()=>[{id:"gchat-hub",secret:env.BRIDGE_SECRET,role:"hub"}]});
+  // One shared secret for this demo; separate audiences keep transport and relay tokens distinct.
+  async function relay(body) {
+    if (!env.BRIDGE_SECRET || env.BRIDGE_SECRET.length < 32) throw Error("Bridge secret missing");
+    const url = new URL(env.HUB_URL);
+    if (url.username || url.password || url.search || url.hash || url.pathname !== "/" ||
+      (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost","127.0.0.1"].includes(url.hostname)))) throw Error("Invalid hub URL");
+    const token = jwt.sign({role:"gateway"},env.BRIDGE_SECRET,{algorithm:"HS256",issuer:"integration-gateway",audience:"gchat-hub-events",subject:"integration-gateway",expiresIn:60});
+    const response = await fetchImpl(url.origin + "/internal/google-chat",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify(body),signal:AbortSignal.timeout(15000),redirect:"error"});
+    if (!response.ok) throw Error("Hub unavailable");
+    return response.json();
+  }
+  const callbackAudience = (env.PUBLIC_URL ? env.PUBLIC_URL.replace(/\/$/, "") + "/google-chat" : "");
   const googleAuth = new OAuth2Client();
   const verify = verifyGoogleToken || (async token => {
-    const ticket = await googleAuth.verifyIdToken({idToken:token,audience:env.GOOGLE_CALLBACK_AUDIENCE});
+    const ticket = await googleAuth.verifyIdToken({idToken:token,audience:callbackAudience});
     return ticket.getPayload();
   });
   app.get("/",(req,res)=>res.json({service:"integration-gateway",status:"running"}));
   app.post("/auth/token",auth.login);
   app.post("/google-chat",async(req,res)=>{
     res.set("Cache-Control","no-store");
-    if(!env.GOOGLE_CALLBACK_AUDIENCE || !env.GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL) return res.status(503).json({error:"Google request verification is not configured"});
+    if(!callbackAudience || !env.GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL) return res.status(503).json({error:"Google request verification is not configured"});
     const header=req.get("Authorization") || "";
     if(!header.startsWith("Bearer ")) return res.status(401).json({error:"Google ID token required"});
     try {
       const claims=await verify(header.slice(7));
       if(claims.email_verified!==true || claims.email!==env.GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL) return res.status(403).json({error:"Unexpected Google add-on identity"});
     } catch {return res.status(401).json({error:"Invalid Google ID token"});}
-    try {res.json(await hub.post("/internal/google-chat",req.body));}
+    try {res.json(await relay(req.body));}
     catch {res.status(502).json({error:"Notification hub unavailable"});}
   });
   app.post("/api/google/token",auth.requireRole("hub"),async(req,res)=>{

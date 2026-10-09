@@ -1,33 +1,26 @@
 const express = require("express");
 const { createGoogleTransport } = require("./google-transport");
 const { createAuth } = require("./auth");
-const { randomUUID, createHash } = require("node:crypto");
+const { randomUUID } = require("node:crypto");
 
 const { registerMonitoringPages, escape: escapeHtml } = require("./pages");
 
 function createApp({env = process.env, store = require("./store"), chat = createGoogleTransport(env)} = {}) {
 const app = express();
-function clients() {
-  let list=[];
-  try { list=JSON.parse(env.INTEGRATION_CLIENTS_JSON || "[]"); } catch { throw Error("Invalid integration client configuration"); }
-  if(!Array.isArray(list)) throw Error("Integration clients must be an array");
-  return [...list.filter(c=>c.id!=="integration-gateway").map(c=>({...c,role:"application"})), {id:"integration-gateway",secret:env.GATEWAY_RELAY_SECRET,role:"gateway"}];
-}
-const serviceAuth=createAuth({secret:env.TOKEN_SECRET,issuer:"gchat-hub",audience:"gchat-hub-api",clients});
-app.post("/auth/token", express.json({limit:"16kb"}), serviceAuth.login);
+const serviceAuth=createAuth({secret:env.BRIDGE_SECRET,issuer:"integration-gateway",audience:"gchat-hub-events",clients:()=>[{id:"integration-gateway",secret:env.BRIDGE_SECRET,role:"gateway"}]});
 
 app.use(express.json({limit:"128kb"}));
 app.use(express.urlencoded({ extended: true }));
 
-const GATEWAY_PUBLIC_URL = env.GATEWAY_PUBLIC_URL;
+const GATEWAY_URL = env.GATEWAY_URL;
 
 function getCallbackUrl() {
   let url;
-  try { url = new URL(GATEWAY_PUBLIC_URL); } catch {
-    throw new Error("Set GATEWAY_PUBLIC_URL ke URL HTTPS deployment sebelum mengirim approval.");
+  try { url = new URL(GATEWAY_URL); } catch {
+    throw new Error("Set GATEWAY_URL ke URL HTTPS deployment sebelum mengirim approval.");
   }
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.pathname !== "/") {
-    throw new Error("GATEWAY_PUBLIC_URL harus berupa origin HTTPS, contoh https://nama-project.vercel.app.");
+    throw new Error("GATEWAY_URL harus berupa origin HTTPS, contoh https://nama-project.vercel.app.");
   }
   return url.origin + "/google-chat";
 }
@@ -171,7 +164,7 @@ Registered users: ${users.length}
 // SEND APPROVAL
 // ==============================
 
-async function sendApproval(req, res) {
+app.post("/send-approval", async (req, res) => {
   try {
     const {
       approverEmail,
@@ -186,7 +179,6 @@ async function sendApproval(req, res) {
     );
 
     if (!approver?.nik) {
-      if(req.serviceClient) return res.status(422).json({error:"Approver has not completed registration"});
       return res.status(400).send(`
         User belum terdaftar.
 
@@ -194,13 +186,12 @@ async function sendApproval(req, res) {
       `);
     }
 
-    const approvalId = req.serviceClient
-      ? "APR-" + createHash("sha256").update(JSON.stringify([req.serviceClient, req.body.requestId])).digest("hex").slice(0,32)
-      : "APR-" + randomUUID();
+    const approvalId =
+      "APR-" + randomUUID();
 
     const message = createApprovalMessage({ approvalId, employeeName, type, date, reason });
 
-    const approvalData = {
+    await store.setApproval(approvalId, {
       id: approvalId,
 
       employeeName,
@@ -214,16 +205,7 @@ async function sendApproval(req, res) {
 
       createdAt: new Date().toISOString(),
       deliveryStatus: "SENDING",
-      clientId: req.serviceClient || "admin-demo",
-      sourceRequestId: req.body.requestId || null,
-      requestFingerprint: createHash("sha256").update(JSON.stringify([approverEmail, employeeName, type, date, reason || ""])).digest("hex"),
-      syncStatus: "NOT_READY",
-    };
-    if (!await store.createApproval(approvalId, approvalData)) {
-      const existing = await store.getApproval(approvalId);
-      if (existing.requestFingerprint !== approvalData.requestFingerprint) return res.status(409).json({error:"Request ID already used for different data"});
-      return res.json({id:existing.id,status:existing.status,deliveryStatus:existing.deliveryStatus,duplicate:true});
-    }
+    });
 
     let sent;
     try {
@@ -241,7 +223,6 @@ async function sendApproval(req, res) {
       messageName: sent.data?.name || null,
     });
 
-    if (req.serviceClient) return res.status(201).json({id:approvalId,status:"PENDING",deliveryStatus:"SENT"});
     res.send(`
       <h2>Approval terkirim ✅</h2>
 
@@ -257,35 +238,12 @@ async function sendApproval(req, res) {
 
     console.error("Approval delivery failed");
 
-    if (req.serviceClient) return res.status(502).json({error:"Message delivery failed"});
     res.status(500).send(`
       Gagal mengirim approval.
 
       Cek terminal Node.
     `);
   }
-}
-app.post("/send-approval", sendApproval);
-
-app.post("/api/approvals", serviceAuth.requireRole("application"), async(req,res)=>{
-  const body=req.body || {};
-  if (!["requestId","employeeName","type","date"].every(key=>typeof body[key]==="string" && body[key].trim() && body[key].length<=200) || (body.reason!==undefined && (typeof body.reason!=="string" || body.reason.length>2000)) || typeof body.approverNik!=="string" || !/^[0-9]{1,32}$/.test(body.approverNik)) return res.status(400).json({error:"requestId, approverNik, employeeName, type and date are required"});
-  const approver=await store.getUserByNik(body.approverNik);
-  if(!approver) return res.status(422).json({error:"Approver has not completed registration"});
-  req.body={...body,approverEmail:approver.email};
-  return sendApproval(req,res);
-});
-app.get("/api/approvals/:id",serviceAuth.requireRole("application"),async(req,res)=>{
-  const approval=await store.getApproval(req.params.id);
-  if(!approval || approval.clientId!==req.serviceClient) return res.status(404).json({error:"Approval not found"});
-  res.json(approval);
-});
-app.get("/api/decisions",serviceAuth.requireRole("application"),async(req,res)=>{
-  res.json({items:await store.listPendingDecisions(req.serviceClient)});
-});
-app.post("/api/decisions/:id/ack",serviceAuth.requireRole("application"),async(req,res)=>{
-  const ok=await store.ackDecision(req.params.id,req.serviceClient);
-  return ok?res.json({acknowledged:true}):res.status(404).json({error:"Decision not found"});
 });
 
 // ==============================

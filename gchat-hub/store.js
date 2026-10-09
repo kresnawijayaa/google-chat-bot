@@ -10,30 +10,6 @@ if (process.env.VERCEL && !databaseUrl) {
 const sql = databaseUrl ? require("@neondatabase/serverless").neon(databaseUrl) : null;
 
 module.exports = {
-  async getUserByNik(nik) {
-    if(!sql) return [...users.values()].find(user=>user.nik===nik);
-    return (await sql.query("SELECT data FROM bot_users WHERE data->>'nik' = $1",[nik]))[0]?.data;
-  },
-  async createApproval(id, approval) {
-    if(!sql) {if(approvals.has(id)) return false;approvals.set(id,approval);return true;}
-    return (await sql.query("INSERT INTO bot_approvals (id, approver_email, status, data) VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (id) DO NOTHING RETURNING id",[id,approval.approverEmail,approval.status,JSON.stringify(approval)])).length>0;
-  },
-  async getApproval(id) {
-    if(!sql) return approvals.get(id);
-    return (await sql.query("SELECT data FROM bot_approvals WHERE id = $1",[id]))[0]?.data;
-  },
-  async listPendingDecisions(clientId) {
-    if(!sql) return [...approvals.values()].filter(a=>a.clientId===clientId && a.status!=="PENDING" && a.syncStatus!=="ACKNOWLEDGED").slice(0,100);
-    return (await sql.query("SELECT data FROM bot_approvals WHERE data->>'clientId' = $1 AND status <> 'PENDING' AND data->>'syncStatus' IS DISTINCT FROM 'ACKNOWLEDGED' ORDER BY data->>'updatedAt', id LIMIT 100",[clientId])).map(row=>row.data);
-  },
-  async ackDecision(id,clientId) {
-    const metadata={syncStatus:"ACKNOWLEDGED",acknowledgedAt:new Date().toISOString()};
-    if(!sql) {const approval=approvals.get(id);if(!approval || approval.clientId!==clientId || approval.status==="PENDING") return false; if(approval.syncStatus!=="ACKNOWLEDGED") Object.assign(approval,metadata);return true;}
-    const rows=await sql.query("UPDATE bot_approvals SET data = data || $3::jsonb WHERE id = $1 AND data->>'clientId' = $2 AND status <> 'PENDING' AND data->>'syncStatus' IS DISTINCT FROM 'ACKNOWLEDGED' RETURNING id",[id,clientId,JSON.stringify(metadata)]);
-    if(rows.length) return true;
-    const previous=(await sql.query("SELECT data FROM bot_approvals WHERE id = $1",[id]))[0]?.data;
-    return !!previous && previous.clientId===clientId && previous.status!=="PENDING" && previous.syncStatus==="ACKNOWLEDGED";
-  },
   async setAllowedUser(nik, email, displayName = "") {
     email = email.trim().toLowerCase();
     if (!sql) { allowedUsers.set(nik, { email, displayName, enabled: true }); return; }
@@ -135,7 +111,7 @@ module.exports = {
          SET status = $3, data = data || $4::jsonb
          WHERE id = $1 AND approver_email = $2 AND status = 'PENDING'
          RETURNING data`,
-        [id, email || "", status, JSON.stringify({ status, updatedAt: now, approvedBy: email, syncStatus: "AWAITING_ACK" })],
+        [id, email || "", status, JSON.stringify({ status, updatedAt: now, approvedBy: email })],
       );
       if (rows.length) return { approval: rows[0].data };
       // A separate query sees a concurrent decision committed by another instance.
@@ -148,7 +124,7 @@ module.exports = {
     if (!approval) return { error: "missing" };
     if (email !== approval.approverEmail) return { error: "forbidden" };
     if (approval.status !== "PENDING") return { error: "decided", approval };
-    Object.assign(approval, { status, updatedAt: now, approvedBy: email, syncStatus: "AWAITING_ACK" });
+    Object.assign(approval, { status, updatedAt: now, approvedBy: email });
     return { approval };
   },
 };
