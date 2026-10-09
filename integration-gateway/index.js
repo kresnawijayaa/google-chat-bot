@@ -1,17 +1,23 @@
 const express = require("express");
+const { createDebug } = require("./debug");
 const { OAuth2Client } = require("google-auth-library");
 const { createAuth } = require("./auth");
 const jwt = require("jsonwebtoken");
-function createApp({ env = process.env, fetchImpl = fetch, verifyGoogleToken } = {}) {
+function createApp({ env = process.env, fetchImpl = fetch, debugSink, verifyGoogleToken } = {}) {
   const app = express();
+  const debug = createDebug({env,service:"integration-gateway",sink:debugSink});
+  fetchImpl = debug.wrapFetch(fetchImpl);
+  app.use(debug.middleware);
   app.use(express.json({limit:"128kb"}));
-  const auth = createAuth({secret:env.BRIDGE_SECRET,issuer:"integration-gateway",audience:"integration-gateway-api",clients:()=>[{id:"gchat-hub",secret:env.BRIDGE_SECRET,role:"hub"}]});
+  app.use(debug.payload);
+  const auth = createAuth({secret:env.BRIDGE_SECRET,issuer:"integration-gateway",audience:"integration-gateway-api",clients:()=>[{id:"gchat-hub",secret:env.BRIDGE_SECRET,role:"hub"}],debug});
   // One shared secret for this demo; separate audiences keep transport and relay tokens distinct.
   async function relay(body) {
     if (!env.BRIDGE_SECRET || env.BRIDGE_SECRET.length < 32) throw Error("Bridge secret missing");
     const url = new URL(env.HUB_URL);
     if (url.username || url.password || url.search || url.hash || url.pathname !== "/" ||
       (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost","127.0.0.1"].includes(url.hostname)))) throw Error("Invalid hub URL");
+    debug.log("RELAY_TOKEN_CREATE", {destination:url.origin + "/internal/google-chat",expiresIn:60});
     const token = jwt.sign({role:"gateway"},env.BRIDGE_SECRET,{algorithm:"HS256",issuer:"integration-gateway",audience:"gchat-hub-events",subject:"integration-gateway",expiresIn:60});
     const response = await fetchImpl(url.origin + "/internal/google-chat",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify(body),signal:AbortSignal.timeout(15000),redirect:"error"});
     if (!response.ok) throw Error("Hub unavailable");
@@ -33,9 +39,10 @@ function createApp({ env = process.env, fetchImpl = fetch, verifyGoogleToken } =
     try {
       const claims=await verify(header.slice(7));
       if(claims.email_verified!==true || claims.email!==env.GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL) return res.status(403).json({error:"Unexpected Google add-on identity"});
-    } catch {return res.status(401).json({error:"Invalid Google ID token"});}
+      debug.log("GOOGLE_ID_TOKEN_VERIFIED", {email:claims.email,audience:claims.aud,expiresAt:claims.exp});
+    } catch (error) {debug.log("GOOGLE_ID_TOKEN_REJECTED", {error});return res.status(401).json({error:"Invalid Google ID token"});}
     try {res.json(await relay(req.body));}
-    catch {res.status(502).json({error:"Notification hub unavailable"});}
+    catch (error) {debug.log("RELAY_ERROR", {error});res.status(502).json({error:"Notification hub unavailable"});}
   });
   app.post("/api/google/token",auth.requireRole("hub"),async(req,res)=>{
     if(typeof req.body?.assertion!=="string" || req.body.assertion.length>16000) return res.status(400).json({error:"JWT assertion required"});
@@ -60,7 +67,7 @@ function createApp({ env = process.env, fetchImpl = fetch, verifyGoogleToken } =
       return res.json(await response.json());
     } catch {return res.status(502).json({error:"Google Chat unavailable"});}
   });
-  app.use((error,req,res,next)=>res.status(error.status===400?400:500).json({error:"Request could not be processed"}));
+  app.use((error,req,res,next)=>{debug.log("REQUEST_ERROR", {error});res.status(error.status===400?400:500).json({error:"Request could not be processed"});});
   return app;
 }
 const app=createApp();

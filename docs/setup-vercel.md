@@ -38,3 +38,7 @@ Login gateway berjalan otomatis di server; tidak perlu inject cookie. Request Go
 Schema: gchat-hub/db/schema.sql. Database lama yang sudah lengkap tidak perlu dibuat ulang.
 
 Tes memakai Google mock. Uji callback Google nyata dilakukan setelah domain dan identitas add-on diisi.
+
+## Melihat alur development
+
+Tambahkan DEBUG_FLOW=true pada kedua project dan redeploy. Buka tab Logs untuk melihat request/payload/hasil. Petunjuk membaca log: [debug-flow.md](debug-flow.md).

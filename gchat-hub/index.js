@@ -1,16 +1,22 @@
 const express = require("express");
+const { createDebug } = require("./debug");
 const { createGoogleTransport } = require("./google-transport");
 const { createAuth } = require("./auth");
 const { randomUUID } = require("node:crypto");
 
 const { registerMonitoringPages, escape: escapeHtml } = require("./pages");
 
-function createApp({env = process.env, store = require("./store"), chat = createGoogleTransport(env)} = {}) {
+function createApp({env = process.env, store = require("./store"), chat, debugSink} = {}) {
 const app = express();
-const serviceAuth=createAuth({secret:env.BRIDGE_SECRET,issuer:"integration-gateway",audience:"gchat-hub-events",clients:()=>[{id:"integration-gateway",secret:env.BRIDGE_SECRET,role:"gateway"}]});
+const debug = createDebug({env,service:"gchat-hub",sink:debugSink});
+store = debug.wrapStore(store);
+chat = chat || createGoogleTransport(env, fetch, debug);
+app.use(debug.middleware);
+const serviceAuth=createAuth({secret:env.BRIDGE_SECRET,issuer:"integration-gateway",audience:"gchat-hub-events",clients:()=>[{id:"integration-gateway",secret:env.BRIDGE_SECRET,role:"gateway"}],debug});
 
 app.use(express.json({limit:"128kb"}));
 app.use(express.urlencoded({ extended: true }));
+app.use(debug.payload);
 
 const GATEWAY_URL = env.GATEWAY_URL;
 
@@ -236,6 +242,7 @@ app.post("/send-approval", async (req, res) => {
 
   } catch (error) {
 
+    debug.log("APPROVAL_ERROR", {error});
     console.error("Approval delivery failed");
 
     res.status(500).send(`
@@ -251,9 +258,7 @@ app.post("/send-approval", async (req, res) => {
 // ==============================
 
 app.post("/internal/google-chat", serviceAuth.requireRole("gateway"), async (req, res) => {
-  console.log("\n========== GOOGLE CHAT ==========");
-  console.log("Event:", req.body.chat?.appCommandPayload ? "APP_COMMAND" : req.body.chat?.buttonClickedPayload ? "BUTTON_CLICK" : "MESSAGE");
-  console.log("=================================\n");
+  debug.log("CHAT_EVENT", {eventType:req.body.chat?.appCommandPayload ? "APP_COMMAND" : req.body.chat?.buttonClickedPayload ? "BUTTON_CLICK" : "MESSAGE"});
 
   const event = req.body;
 
@@ -585,6 +590,7 @@ function createTextResponse(text) {
 // ==============================
 
 app.use((error, req, res, next) => {
+  debug.log("REQUEST_ERROR", {error});
   console.error("Request failed");
   res.status(500).json({ error: "Layanan gagal memproses request. Periksa konfigurasi dan log server." });
 });

@@ -30,12 +30,14 @@ async function login(url,id,password) {
 }
 test("Demo through gateway: registration, token login, delivery, approve and reject",async()=>{
   const {privateKey,publicKey}=generateKeyPairSync("rsa",{modulusLength:2048,privateKeyEncoding:{type:"pkcs8",format:"pem"},publicKeyEncoding:{type:"spki",format:"pem"}});
+  const logs=[];
+  const debugSink=line=>logs.push(JSON.parse(line));
   const store=memoryStore();
   await store.setAllowedUser("00042","approver@example.com","Approver");
   const callbackAudience="https://gateway.example.com/google-chat";
   const incomingEmail="addon@example.iam.gserviceaccount.com";
-  const hubEnv={ADMIN_PASSWORD:secret("admin"),BRIDGE_SECRET:secret("bridge"),GOOGLE_SERVICE_ACCOUNT_JSON:JSON.stringify({client_email:"sender@example.iam.gserviceaccount.com",private_key:privateKey})};
-  const gatewayEnv={BRIDGE_SECRET:secret("bridge"),PUBLIC_URL:"https://gateway.example.com",GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL:incomingEmail};
+  const hubEnv={DEBUG_FLOW:"true",ADMIN_PASSWORD:secret("admin"),BRIDGE_SECRET:secret("bridge"),GOOGLE_SERVICE_ACCOUNT_JSON:JSON.stringify({client_email:"sender@example.iam.gserviceaccount.com",private_key:privateKey})};
+  const gatewayEnv={DEBUG_FLOW:"true",BRIDGE_SECRET:secret("bridge"),PUBLIC_URL:"https://gateway.example.com",GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL:incomingEmail};
   let deliveries=0;
   const sent=[];
   const transport=async(url,options)=>{
@@ -46,25 +48,25 @@ test("Demo through gateway: registration, token login, delivery, approve and rej
       return Response.json({access_token:"google-test-access",expires_in:3600});
     }
     if(url.startsWith("https://chat.googleapis.com/v1/")) {
-      assert.equal(options.headers.Authorization,"Bearer google-test-access");
+      assert.equal(new Headers(options.headers).get("Authorization"),"Bearer google-test-access");
       deliveries++;sent.push(JSON.parse(options.body));
       return Response.json({name:"spaces/dm/messages/test"});
     }
     return fetch(url,options);
   };
-  const hub=await start(createHub({env:hubEnv,store}));
+  const hub=await start(createHub({env:hubEnv,store,debugSink}));
   gatewayEnv.HUB_URL=hub.url;
   const verifyGoogleToken=async token=>jwt.verify(token,publicKey,{algorithms:["RS256"],audience:callbackAudience,issuer:"https://accounts.google.com"});
-  const gateway=await start(createGateway({env:gatewayEnv,fetchImpl:transport,verifyGoogleToken}));
+  const gateway=await start(createGateway({env:gatewayEnv,fetchImpl:transport,verifyGoogleToken,debugSink}));
   hubEnv.GATEWAY_URL=gateway.url;
   // Transport's service URL is read when constructed; re-create hub after binding gateway URL.
   await new Promise(r=>hub.server.close(r));
-  const activeHub=await start(createHub({env:hubEnv,store}));
+  const activeHub=await start(createHub({env:hubEnv,store,debugSink}));
   gatewayEnv.HUB_URL=activeHub.url;
   // Recreate gateway with the final hub URL, preserving the same local listen address.
   const gatewayPort=gateway.server.address().port;
   await new Promise(r=>gateway.server.close(r));
-  const app=createGateway({env:gatewayEnv,fetchImpl:transport,verifyGoogleToken});
+  const app=createGateway({env:gatewayEnv,fetchImpl:transport,verifyGoogleToken,debugSink});
   const gatewayServer=app.listen(gatewayPort,"127.0.0.1");
   await new Promise(r=>gatewayServer.once("listening",r));
   const googleToken=claims=>jwt.sign({email:incomingEmail,email_verified:true,...claims},privateKey,{algorithm:"RS256",issuer:"https://accounts.google.com",audience:callbackAudience,expiresIn:300});
@@ -93,7 +95,7 @@ test("Demo through gateway: registration, token login, delivery, approve and rej
     // Local transport uses HTTP; card callbacks still require the public HTTPS gateway.
     // Construct a hub transport pointing locally while exposing the production callback origin.
     const {createGoogleTransport}=require("../gchat-hub/google-transport");
-    const demoHub=await start(createHub({env:{...hubEnv,GATEWAY_URL:"https://gateway.example.com"},store,chat:createGoogleTransport(hubEnv)}));
+    const demoHub=await start(createHub({env:{...hubEnv,GATEWAY_URL:"https://gateway.example.com"},store,debugSink,chat:createGoogleTransport(hubEnv,fetch,require("../gchat-hub/debug").createDebug({env:hubEnv,service:"gchat-hub",sink:debugSink}))}));
     let approval;
     try {
       headers.Origin=demoHub.url;
@@ -124,6 +126,14 @@ test("Demo through gateway: registration, token login, delivery, approve and rej
     assert.equal((await fetch(activeHub.url+"/approval-demo")).status,401);
     const outboundToken=await login(gateway.url,"gchat-hub",secret("bridge"));
     assert.equal((await jsonPost(gateway.url+"/api/google/messages",{parent:"https://attacker.example.com",message:{text:"x"},googleAccessToken:"fake"},outboundToken)).status,400);
+    assert.ok(logs.some(line=>line.step==="LOGIN_SUCCESS"));
+    assert.ok(logs.some(line=>line.step==="GOOGLE_ID_TOKEN_VERIFIED"));
+    assert.ok(logs.some(line=>line.step==="STORE_RESULT" && line.operation==="decide" && line.output.approval?.status==="APPROVED"));
+    assert.ok(logs.some(line=>line.step==="FETCH_SEND" && line.url.startsWith("https://chat.googleapis.com/")));
+    const callbackSend=logs.find(line=>line.step==="FETCH_SEND" && line.url===activeHub.url+"/internal/google-chat");
+    assert.ok(logs.some(line=>line.service==="gchat-hub" && line.step==="HTTP_IN" && line.requestId===callbackSend.requestId));
+    const serialized=JSON.stringify(logs);
+    for (const hidden of [hubEnv.BRIDGE_SECRET,hubEnv.ADMIN_PASSWORD,privateKey,valid,bridgeToken,"google-test-access"]) assert.ok(!serialized.includes(hidden));
   } finally {await new Promise(r=>gatewayServer.close(r));await new Promise(r=>activeHub.server.close(r));}
 });
 test("Unconfigured gateway rejects callbacks and transport instead of allowing anonymous access",async()=>{

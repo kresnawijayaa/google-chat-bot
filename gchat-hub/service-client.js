@@ -1,4 +1,4 @@
-function createServiceClient({baseUrl, clientId, clientSecret, fetchImpl = fetch}) {
+function createServiceClient({baseUrl, clientId, clientSecret, fetchImpl = fetch, debug}) {
   let cached, expires = 0;
   function base() {
     const url = new URL(baseUrl);
@@ -6,7 +6,7 @@ function createServiceClient({baseUrl, clientId, clientSecret, fetchImpl = fetch
     return url.origin;
   }
   async function token() {
-    if (cached && expires > Date.now()) return cached;
+    if (cached && expires > Date.now()) {debug?.log("GATEWAY_TOKEN_CACHE", {expiresAt:new Date(expires).toISOString()});return cached;}
     const response = await fetchImpl(base()+"/auth/token",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_id:clientId,client_secret:clientSecret}),signal:AbortSignal.timeout(8000),redirect:"error"});
     if (!response.ok) throw Error("Service login failed");
     const result = await response.json();
@@ -16,7 +16,7 @@ function createServiceClient({baseUrl, clientId, clientSecret, fetchImpl = fetch
   }
   async function post(endpoint,body,retry=true) {
     const response = await fetchImpl(base()+endpoint,{method:"POST",headers:{"Authorization":"Bearer "+await token(),"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(15000),redirect:"error"});
-    if(response.status===401 && retry) {cached=null;return post(endpoint,body,false);}
+    if(response.status===401 && retry) {debug?.log("GATEWAY_LOGIN_RETRY", {reason:"Token rejected; logging in again"});cached=null;return post(endpoint,body,false);}
     const result = await response.json();
     if(!response.ok) {const error=new Error("Upstream service request failed");error.status=response.status;throw error;}
     return result;
