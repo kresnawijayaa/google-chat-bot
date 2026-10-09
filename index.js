@@ -188,11 +188,11 @@ app.post("/send-approval", async (req, res) => {
       approverEmail
     );
 
-    if (!approver) {
+    if (!approver?.nik) {
       return res.status(400).send(`
         User belum terdaftar.
 
-        Silakan chat bot terlebih dahulu.
+        Silakan daftar melalui /regist dan validasi NIK terlebih dahulu.
       `);
     }
 
@@ -261,7 +261,7 @@ app.post("/send-approval", async (req, res) => {
 
 app.post("/google-chat", async (req, res) => {
   console.log("\n========== GOOGLE CHAT ==========");
-  console.log(JSON.stringify(req.body, null, 2));
+  console.log("Event:", req.body.chat?.appCommandPayload ? "APP_COMMAND" : req.body.chat?.buttonClickedPayload ? "BUTTON_CLICK" : "MESSAGE");
   console.log("=================================\n");
 
   const event = req.body;
@@ -274,77 +274,37 @@ app.post("/google-chat", async (req, res) => {
     });
   }
 
-  // ==============================
-  // AUTO REGISTER USER
-  // ==============================
-
   const user = chatEvent.user;
+  const payload = chatEvent.messagePayload || chatEvent.appCommandPayload;
+  const space = chatEvent.space || payload?.space || chatEvent.buttonClickedPayload?.space;
 
-  const space =
-    chatEvent.space ||
-    chatEvent.messagePayload?.space ||
-    chatEvent.buttonClickedPayload?.space;
+  if (chatEvent.buttonClickedPayload) return handleApprovalClick(event, res);
 
-  if (
-    user?.email &&
-    space?.name &&
-    space?.spaceType === "DIRECT_MESSAGE"
-  ) {
-
-    const existingUser = await store.getUser(user.email);
-    const seenAt = new Date().toISOString();
-    await store.setUser(user.email, {
-      registeredAt: existingUser?.registeredAt || seenAt,
-      lastSeenAt: seenAt,
-      email: user.email,
-
-      displayName:
-        user.displayName || user.email,
-
-      googleUser:
-        user.name,
-
-      dmSpace:
-        space.name,
-    });
-
-    console.log(
-      "REGISTERED:",
-      user.email,
-      space.name
-    );
-  }
-
-  // ==============================
-  // BUTTON CLICK
-  // ==============================
-
-  if (chatEvent.buttonClickedPayload) {
-    return handleApprovalClick(event, res);
-  }
-
-  // ==============================
-  // NORMAL MESSAGE
-  // ==============================
-
-  if (chatEvent.messagePayload) {
-
-    const displayName =
-      user?.displayName || "User";
-
-    return res.json({
-      hostAppDataAction: {
-        chatDataAction: {
-          createMessageAction: {
-            message: {
-              text:
-                `Halo ${displayName} 👋\n\n` +
-                `User Anda sudah terdaftar untuk menerima approval.`,
-            },
-          },
-        },
-      },
-    });
+  if (payload) {
+    if (!user?.email || !space?.name || space.spaceType !== "DIRECT_MESSAGE") {
+      return res.json(createTextResponse("Pendaftaran hanya melalui DM bot. Buka DM lalu kirim /regist."));
+    }
+    const email = user.email.trim().toLowerCase();
+    const message = String(payload.message?.argumentText || payload.message?.text || "").trim();
+    const commandId = chatEvent.appCommandPayload?.appCommandMetadata?.appCommandId;
+    const isRegist = ["regist", "/regist"].includes(message.toLowerCase()) || (commandId !== undefined && String(commandId) === String(process.env.REGISTRATION_COMMAND_ID || "1"));
+    const existing = await store.getUser(email);
+    if (isRegist) {
+      if (existing?.nik) return res.json(createTextResponse("Anda sudah terdaftar untuk menerima approval."));
+      await store.beginRegistration(email, space.name);
+      return res.json(createTextResponse("Silakan kirim NIK Anda sebagai pesan berikutnya. NIK harus sesuai akun Workspace Anda dan terdaftar dalam daftar yang diizinkan. Sesi berlaku 10 menit."));
+    }
+    if (chatEvent.appCommandPayload) return res.json(createTextResponse("Command tidak dikenal. Gunakan /regist untuk mendaftar."));
+    if (await store.isAwaitingNik(email, space.name)) {
+      if (!/^[0-9]{1,32}$/.test(message)) return res.json(createTextResponse("NIK harus berupa angka, maksimal 32 digit. Kirim NIK saja; pertahankan angka nol di depan."));
+      const registered = await store.registerByNik(message, { email, displayName: user.displayName || email, googleUser: user.name, dmSpace: space.name });
+      return res.json(createTextResponse(registered
+        ? "Pendaftaran berhasil. Anda sudah terdaftar untuk menerima approval."
+        : "Pendaftaran gagal. NIK dan akun Workspace tidak cocok atau belum diizinkan. Periksa NIK atau hubungi admin."));
+    }
+    return res.json(createTextResponse(existing?.nik
+      ? "Anda sudah terdaftar untuk menerima approval."
+      : "Untuk mendaftar, kirim /regist lalu masukkan NIK ketika diminta."));
   }
 
   // ==============================
@@ -360,7 +320,7 @@ app.post("/google-chat", async (req, res) => {
             message: {
               text:
                 "Bot Approval berhasil ditambahkan ✅\n\n" +
-                "Kirim pesan apa saja untuk melakukan registrasi.",
+                "Kirim /regist melalui DM bot untuk melakukan registrasi.",
             },
           },
         },

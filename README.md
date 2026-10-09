@@ -24,7 +24,7 @@ Registrasi pengguna dan approval harus tersedia untuk setiap instance Vercel ser
 4. Hapus UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, dan STORAGE_PREFIX dari Vercel jika sempat ditambahkan; kode tidak memakainya lagi.
 5. Deploy atau redeploy setelah environment variables diubah. Vercel wajib memiliki DATABASE_URL. Tabel harus sudah dibuat pada database yang ditunjuk connection string.
 6. Ubah endpoint HTTP konfigurasi/deployment Google Workspace add-on ke https://nama-project.vercel.app/google-chat. Pastikan Google bisa mengakses endpoint tanpa halaman login Vercel Deployment Protection.
-7. Kirim DM baru ke bot untuk registrasi. Buka https://nama-project.vercel.app/approval-demo, kirim kartu baru, lalu klik Approve/Decline. Pantau Vercel Runtime Logs.
+7. Isi allowed_users lalu kirim /regist di DM bot dan masukkan NIK untuk registrasi. Buka https://nama-project.vercel.app/approval-demo, kirim kartu baru, lalu klik Approve/Decline. Pantau Vercel Runtime Logs.
 
 Setelah repository terhubung ke Vercel, push ke branch Production memicu deployment otomatis. Kartu lama menyimpan callback lama; kirim kartu baru setelah pindah domain. Data memory lokal atau Redis sebelumnya tidak otomatis dimigrasikan.
 
@@ -57,4 +57,31 @@ Jalankan npm test. Tes mencakup alur HTTP, pengiriman kartu dengan Chat API mock
 
 ### Hapus pengguna
 
-Di /users pilih Hapus pengguna, lalu konfirmasi pada halaman berikutnya. Penghapusan memerlukan login admin dan token konfirmasi yang berlaku 15 menit. Hanya registrasi pengguna yang dihapus; riwayat dan pengajuan yang telah dikirim tetap ada. Pengguna bisa terdaftar kembali saat berinteraksi dengan bot melalui DM.
+Di /users pilih Hapus pengguna, lalu konfirmasi pada halaman berikutnya. Penghapusan memerlukan login admin dan token konfirmasi yang berlaku 15 menit. Hanya registrasi pengguna yang dihapus; riwayat dan pengajuan yang telah dikirim tetap ada. Pengguna bisa terdaftar kembali melalui /regist dan validasi NIK di DM bot.
+
+## Registrasi dengan NIK
+
+Migrasi: npm run db:migrate-registration, atau jalankan db/registration.sql di Neon SQL Editor. Script memakai DATABASE_URL; pada lokal bisa membaca .env. Migrasi menambah allowed_users, bot_registration_sessions dan indeks NIK unik tanpa menghapus registrasi lama.
+
+Isi daftar izin pada Neon SQL Editor (ganti contoh dengan data yang benar):
+
+```sql
+INSERT INTO allowed_users (nik, email, display_name)
+VALUES ('00123456', 'nama@indomaret.com', 'Nama Karyawan')
+ON CONFLICT (nik) DO UPDATE
+SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, enabled = TRUE;
+```
+
+Email wajib huruf kecil. NIK harus cocok dengan email Workspace pengirim. enabled = FALSE menolak registrasi baru; tidak otomatis mencabut registrasi lama. NIK/email hanya dikelola di database saat ini, belum ada halaman admin whitelist.
+
+Google Chat API > Configuration > Commands > Add a command:
+- Command type: Slash command.
+- Name: /regist.
+- Command ID: 1 (atau sesuaikan environment REGISTRATION_COMMAND_ID).
+- Description: Daftar pengguna approval dengan NIK.
+- Triggers > App command: https://google-chat-bot-jade.vercel.app/google-chat, atau gunakan common HTTP endpoint yang sama.
+- Save konfigurasi.
+
+Alur pengguna: /regist → bot meminta NIK → kirim NIK saja → validasi allowed_users → pendaftaran berhasil. Teks regist juga diterima sebagai alternatif sebelum slash command dikonfigurasi. Pesan biasa dan klik tombol tidak lagi mendaftarkan pengguna. Pengguna lama tanpa NIK perlu /regist sebelum dipilih untuk pengiriman baru. Sesi berlaku 10 menit.
+
+Referensi command: https://developers.google.com/workspace/add-ons/chat/commands

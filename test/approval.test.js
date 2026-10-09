@@ -37,7 +37,12 @@ test("HTTP registration, sending and concurrent approval decisions", async () =>
   });
   try {
     assert.equal(typeof app, "function");
-    const registration = await post("/google-chat", { chat: { user: { email: "approver@example.com" }, space: { name: "spaces/test", spaceType: "DIRECT_MESSAGE" }, messagePayload: {} } });
+    await store.setAllowedUser("001234", "approver@example.com", "Approver");
+    const registrationEvent = text => ({ chat: { user: { email: "approver@example.com" }, space: { name: "spaces/test", spaceType: "DIRECT_MESSAGE" }, messagePayload: { message: { text } } } });
+    await post("/google-chat", registrationEvent("halo"));
+    assert.equal(await store.getUser("approver@example.com"), undefined);
+    await post("/google-chat", registrationEvent("/regist"));
+    const registration = await post("/google-chat", registrationEvent("001234"));
     assert.equal(registration.status, 200);
     assert.match(await (await fetch(base + "/approval-demo")).text(), /approver@example.com/);
     assert.equal((await post("/send-approval", { approverEmail: "approver@example.com", employeeName: "Budi", type: "Cuti", date: "12 Oktober", reason: "Keluarga" })).status, 200);
@@ -204,5 +209,66 @@ test("Deleting users requires admin and a valid confirmation, and preserves appr
     assert.equal((await fetch(base + "/users/delete?email=" + encodeURIComponent(email), { headers })).status, 404);
     await store.setUser(email, { email }); // A later DM can register the user again.
     assert.ok(await store.getUser(email));
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test("NIK registration survives instances, rejects unauthorized users and consumes the session", async () => {
+  const { PGlite } = require("@electric-sql/pglite");
+  const db = new PGlite();
+  const adapter = { query: async (query, params) => (await db.query(query, params)).rows };
+  const env = { DATABASE_URL: "postgresql://test:test@localhost/test" };
+  const first = loadStore(env, adapter), second = loadStore(env, adapter);
+  try {
+    await db.exec(fs.readFileSync(path.join(root, "db/schema.sql"), "utf8"));
+    await first.setAllowedUser("001234", "employee@example.com", "Employee");
+    const user = { email: "employee@example.com", dmSpace: "spaces/employee", displayName: "From Google" };
+    assert.equal(await first.registerByNik("001234", user), false);
+    await first.beginRegistration(user.email, user.dmSpace);
+    assert.equal(await second.isAwaitingNik(user.email, user.dmSpace), true);
+    assert.equal(await second.registerByNik("999999", user), false);
+    assert.equal(await second.registerByNik("001234", {...user, dmSpace: "spaces/other"}), false);
+    await first.beginRegistration("impostor@example.com", "spaces/impostor");
+    assert.equal(await second.registerByNik("001234", {email:"impostor@example.com",dmSpace:"spaces/impostor"}), false);
+    assert.equal(await second.getUser("impostor@example.com"), undefined);
+    assert.equal(await second.registerByNik("001234", user), true);
+    assert.equal((await first.getUser(user.email)).nik, "001234");
+    assert.equal((await first.getUser(user.email)).displayName, "Employee");
+    assert.equal(await first.isAwaitingNik(user.email, user.dmSpace), false);
+    assert.equal(await first.registerByNik("001234", user), false);
+    await first.deleteUser(user.email);
+    await first.beginRegistration(user.email, user.dmSpace);
+    await db.query("UPDATE bot_registration_sessions SET expires_at = NOW() - INTERVAL '1 minute' WHERE email = $1", [user.email]);
+    assert.equal(await second.isAwaitingNik(user.email, user.dmSpace), false);
+    assert.equal(await second.registerByNik("001234", user), false);
+    await first.beginRegistration(user.email, user.dmSpace);
+    await db.query("UPDATE allowed_users SET enabled = FALSE WHERE nik = $1", ["001234"]);
+    assert.equal(await second.registerByNik("001234", user), false);
+  } finally { await db.close(); }
+});
+test("Registration command handles slash events, invalid input and never registers random messages or clicks", async () => {
+  const store = loadStore();
+  await store.setAllowedUser("00042", "user@example.com");
+  const app = loadApp(store);
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  const base = "http://127.0.0.1:" + server.address().port;
+  const space = {name:"spaces/user",spaceType:"DIRECT_MESSAGE"};
+  const user = {email:"user@example.com",name:"users/42"};
+  const post = async chat => (await fetch(base + "/google-chat", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat})})).json();
+  const message = text => post({user,space,messagePayload:{message:{text}}});
+  try {
+    await message("00042"); assert.equal(await store.getUser(user.email), undefined);
+    await post({user,space,buttonClickedPayload:{}}); assert.equal(await store.getUser(user.email), undefined);
+    const command = await post({user,appCommandPayload:{space,appCommandMetadata:{appCommandId:"1"}}});
+    assert.match(JSON.stringify(command), /Silakan kirim NIK/);
+    assert.match(JSON.stringify(await message("abc")), /NIK harus berupa angka/);
+    assert.match(JSON.stringify(await message("999")), /Pendaftaran gagal/);
+    assert.match(JSON.stringify(await message("00042")), /Pendaftaran berhasil/);
+    assert.equal((await store.getUser(user.email)).nik, "00042");
+    assert.match(JSON.stringify(await message("/regist")), /sudah terdaftar/);
+    await store.deleteUser(user.email);
+    await message("halo"); assert.equal(await store.getUser(user.email), undefined);
+    await post({user,space:{...space,spaceType:"SPACE"},messagePayload:{message:{text:"/regist"}}});
+    assert.equal(await store.isAwaitingNik(user.email, space.name), false);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
