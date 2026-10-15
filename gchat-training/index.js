@@ -72,7 +72,7 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = 
   // 4. Kartu yang dikirim ke approver. Parameter kembali saat tombol diklik.
   function approvalCard(approval) {
     return {
-      text: approval.title,
+      fallbackText: approval.title,
       cardsV2: [{
         cardId: approval.id,
         card: {
@@ -210,7 +210,7 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = 
       if (!approval) return res.json(textResponse("Pengajuan sudah diproses. Muat ulang halaman untuk melihat hasil."));
       console.log("KEPUTUSAN", approval.id, approval.status);
       return res.json({ hostAppDataAction: { chatDataAction: { updateMessageAction: { message: {
-        text: approval.title + " — " + approval.status,
+        fallbackText: approval.title + " — " + approval.status,
         cardsV2: [{ cardId: approval.id, card: {
           header: { title: approval.status },
           sections: [{ widgets: [{ textParagraph: { text: escape(approval.title) + "<br>Diproses oleh " + escape(email) } }] }],

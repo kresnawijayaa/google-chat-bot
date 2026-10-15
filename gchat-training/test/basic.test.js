@@ -52,6 +52,7 @@ test("Daftar, kirim, approve/reject, cek approver dan keputusan ganda", async ()
     assert.equal((await send({ Origin: "https://other.example.com" })).status, 403);
     assert.equal((await send({})).status, 303);
     assert.equal(sent[0].space, "spaces/DEMO");
+    assert.equal(sent[0].message.text, undefined);
     const card = sent[0].message.cardsV2[0];
     const buttons = card.card.sections[0].widgets[1].buttonList.buttons;
     assert.equal(buttons[0].onClick.action.function, env.PUBLIC_BASE_URL + "/google-chat");
@@ -61,12 +62,14 @@ test("Daftar, kirim, approve/reject, cek approver dan keputusan ganda", async ()
     assert.match(JSON.stringify(denied), /Anda bukan approver/);
     const approved = await (await googleEvent(url, clickEvent(id, "approve", "approver@example.com"))).json();
     assert.ok(approved.hostAppDataAction.chatDataAction.updateMessageAction);
+    assert.equal(approved.hostAppDataAction.chatDataAction.updateMessageAction.message.text, undefined);
     const duplicate = await (await googleEvent(url, clickEvent(id, "reject", "approver@example.com"))).json();
     assert.match(JSON.stringify(duplicate), /sudah APPROVED/);
     assert.equal((await send({})).status, 303);
     const rejectedId = sent[1].message.cardsV2[0].cardId;
     const rejected = await (await googleEvent(url, clickEvent(rejectedId, "reject", "approver@example.com"))).json();
     assert.match(JSON.stringify(rejected), /REJECTED/);
+    assert.equal(rejected.hostAppDataAction.chatDataAction.updateMessageAction.message.text, undefined);
     page = await (await fetch(url, { headers: { Authorization: admin } })).text();
     assert.match(page, /APPROVED/); assert.match(page, /REJECTED/);
   } finally { await new Promise(resolve => server.close(resolve)); }
