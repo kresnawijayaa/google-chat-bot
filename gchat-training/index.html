@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Latihan Google Chat</title>
+  <style>
+    :root { color-scheme: light; font-family: "Trebuchet MS", sans-serif; color: #213d32; background: #f5f8f4; }
+    * { box-sizing: border-box; }
+    body { max-width: 1000px; margin: auto; padding: 32px 20px 60px; }
+    header { border-bottom: 2px solid #286247; padding-bottom: 20px; }
+    h1 { margin: 6px 0 12px; font-size: clamp(28px, 5vw, 40px); letter-spacing: -1px; }
+    h2 { margin: 0 0 18px; font-size: 22px; }
+    p { line-height: 1.6; }
+    .eyebrow { color: #516e5a; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+    .muted { color: #526b5b; }
+    section { margin-top: 32px; }
+    form { max-width: 600px; }
+    label { display: block; font-weight: bold; margin: 18px 0 7px; }
+    input, select, textarea, button { font: inherit; padding: 12px; border: 1px solid #a6bbaa; border-radius: 4px; }
+    input, select, textarea { width: 100%; background: #fdfefb; color: inherit; }
+    textarea { min-height: 110px; resize: vertical; }
+    button { margin-top: 16px; background: #245d40; color: #f7fbf4; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    a { color: #245d40; text-underline-offset: 3px; }
+    :focus-visible { outline: 3px solid #ae6815; outline-offset: 3px; }
+    .notice { margin-top: 20px; padding: 14px; border: 1px solid #b3c8ad; background: #eaf2e4; }
+    .table { overflow-x: auto; border: 1px solid #d4dfd0; }
+    table { border-collapse: collapse; width: 100%; background: #fdfefb; font-size: 14px; }
+    th, td { text-align: left; padding: 14px; border-bottom: 1px solid #d4dfd0; vertical-align: top; }
+    th { background: #eaf0e6; white-space: nowrap; }
+    td { overflow-wrap: anywhere; }
+    small { display: block; margin-top: 6px; color: #526b5b; }
+    .APPROVED { color: #24633d; font-weight: bold; }
+    .REJECTED { color: #96382c; font-weight: bold; }
+    .PENDING { color: #805a12; font-weight: bold; }
+    @media (max-width: 600px) { th, td { padding: 10px; } button { width: 100%; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">Google Chat · Latihan</div>
+    <h1>Daftar, kirim, putuskan.</h1>
+    <p class="muted">Kirim <strong>/daftar</strong> ke DM bot, pilih penerima di bawah, lalu coba tombol Approve atau Reject di Google Chat.</p>
+    <small>Data latihan sementara. Daftar pengguna dan pengajuan kosong kembali saat server direstart.</small>
+  </header>
+
+  {{notice}}
+
+  <section aria-labelledby="send-title">
+    <h2 id="send-title">Kirim approval</h2>
+    <form method="post" action="/send-approval">
+      <label for="approver">Approver</label>
+      <select id="approver" name="approverEmail" required>{{options}}</select>
+      <label for="title">Judul pengajuan</label>
+      <input id="title" name="title" value="Pengajuan cuti Budi" maxlength="150" required>
+      <label for="detail">Detail</label>
+      <textarea id="detail" name="detail" maxlength="2000" required>Cuti tanggal 20 Oktober 2026 untuk keperluan keluarga.</textarea>
+      <button type="submit" {{disabled}}>Kirim ke Google Chat</button>
+    </form>
+  </section>
+
+  <section aria-labelledby="users-title">
+    <h2 id="users-title">Pengguna terdaftar</h2>
+    <div class="table">
+      <table>
+        <thead><tr><th>Nama</th><th>Email</th></tr></thead>
+        <tbody>{{userRows}}</tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="history-title">
+    <h2 id="history-title">Hasil approval</h2>
+    <p class="muted">Setelah klik tombol di Chat, <a href="/">muat ulang halaman</a> untuk melihat hasil.</p>
+    <div class="table">
+      <table>
+        <thead><tr><th>Pengajuan</th><th>Approver</th><th>Pengiriman</th><th>Keputusan</th></tr></thead>
+        <tbody>{{approvalRows}}</tbody>
+      </table>
+    </div>
+  </section>
+</body>
+</html>

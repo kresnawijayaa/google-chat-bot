@@ -5,6 +5,7 @@
   "scripts": {
     "start:hub": "npm --prefix gchat-hub start",
     "start:gateway": "npm --prefix integration-gateway start",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "start:training": "npm --prefix gchat-training start"
   }
 }
