@@ -104,3 +104,37 @@ test("Kegagalan kirim tercatat dan restart mengosongkan data latihan", async () 
     assert.match(page, /Belum ada pengajuan/);
   } finally { await new Promise(resolve => second.server.close(resolve)); }
 });
+
+test("Sapaan menampilkan tombol Daftar; klik menyimpan pengguna dan sapaan berikutnya menampilkan status", async () => {
+  const { server, url } = await start();
+  try {
+    const hello = registerEvent("button@example.com");
+    hello.chat.messagePayload.message.text = "halo";
+    const welcome = await (await googleEvent(url, hello)).json();
+    const message = welcome.hostAppDataAction.chatDataAction.createMessageAction.message;
+    const button = message.cardsV2[0].card.sections[0].widgets[1].buttonList.buttons[0];
+    assert.equal(button.text, "Daftar");
+    assert.equal(button.onClick.action.function, env.PUBLIC_BASE_URL + "/google-chat");
+    let page = await (await fetch(url, { headers: { Authorization: admin } })).text();
+    assert.match(page, /Belum ada pengguna terdaftar/);
+    const clicked = {
+      commonEventObject: { parameters: { action: "register", email: "forged@example.com" } },
+      chat: { user: hello.chat.user, buttonClickedPayload: { space: hello.chat.space } },
+    };
+    const response = await (await googleEvent(url, clicked)).json();
+    assert.match(JSON.stringify(response), /Pendaftaran berhasil/);
+    page = await (await fetch(url, { headers: { Authorization: admin } })).text();
+    assert.match(page, /button@example.com/); assert.ok(!page.includes("forged@example.com"));
+    const status = await (await googleEvent(url, hello)).json();
+    assert.match(JSON.stringify(status), /Anda sudah terdaftar/);
+    assert.ok(!JSON.stringify(status).includes("buttonList"));
+    clicked.chat.buttonClickedPayload.space.spaceType = "SPACE";
+    assert.match(JSON.stringify(await (await googleEvent(url, clicked)).json()), /melalui DM/);
+    // Event bot ditambahkan di DM juga memberi kartu sambutan.
+    const added = { chat: {
+      user: { email: "new@example.com" },
+      addedToSpacePayload: { space: { name: "spaces/NEW", spaceType: "DIRECT_MESSAGE" } },
+    } };
+    assert.match(JSON.stringify(await (await googleEvent(url, added)).json()), /buttonList/);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});

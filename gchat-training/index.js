@@ -48,6 +48,25 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = 
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[char]));
 
+  // Kartu sambutan: pengguna cukup menekan Daftar, tanpa menghafal command.
+  function registrationMenu(user, success = false) {
+    const text = success ? "Pendaftaran berhasil. Anda sudah bisa menerima approval." :
+      user ? "Anda sudah terdaftar untuk menerima approval." : "Klik Daftar untuk menerima approval melalui bot ini.";
+    const widgets = [{ textParagraph: { text: escape(text) + (user ? "<br>" + escape(user.email) : "") } }];
+    if (!user) widgets.push({ buttonList: { buttons: [{
+      text: "Daftar",
+      onClick: { action: {
+        function: callbackUrl(), parameters: [{ key: "action", value: "register" }],
+      } },
+    }] } });
+    return { hostAppDataAction: { chatDataAction: { createMessageAction: { message: {
+      text, cardsV2: [{ cardId: "registration", card: {
+        header: { title: user ? "Akun terdaftar" : "Selamat datang" },
+        sections: [{ widgets }],
+      } }],
+    } } } } };
+  }
+
   // 4. Kartu yang dikirim ke approver. Parameter kembali saat tombol diklik.
   function approvalCard(approval) {
     return {
@@ -154,11 +173,30 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = 
     if (!chat) return res.status(400).json({ error: "Gunakan event Google Workspace add-on." });
     const email = String(chat.user?.email || "").trim().toLowerCase();
 
+    const payload = chat.appCommandPayload || chat.messagePayload;
+    const space = chat.space || payload?.space || chat.buttonClickedPayload?.space ||
+      chat.buttonClickedPayload?.message?.space || chat.addedToSpacePayload?.space;
+    const action = event.commonEventObject?.parameters?.action;
+    const text = String(payload?.message?.argumentText || payload?.message?.text || "").trim().toLowerCase();
+    const commandId = chat.appCommandPayload?.appCommandMetadata?.appCommandId;
+
+    // Daftar melalui tombol atau command lama; identitas tetap dari Google.
+    if ((chat.buttonClickedPayload && action === "register") ||
+        text === "/daftar" || text === "daftar" || String(commandId) === "1") {
+      if (!email || space?.spaceType !== "DIRECT_MESSAGE" || !/^spaces\/[A-Za-z0-9_-]+$/.test(space?.name || "")) {
+        return res.json(textResponse("Pendaftaran hanya melalui DM bot. Buka DM lalu klik Daftar."));
+      }
+      const user = { email, name: chat.user.displayName || email, space: space.name };
+      await store.set("user", email, user);
+      console.log("DAFTAR", email, space.name);
+      return res.json(registrationMenu(user, true));
+    }
+
     // A. Klik tombol: cek pengajuan, approver dan status, lalu ubah sekali saja.
     if (chat.buttonClickedPayload) {
       const { approvalId, action } = event.commonEventObject?.parameters || {};
+      if (!["approve", "reject"].includes(action) || !approvalId) return res.json(textResponse("Aksi tidak valid."));
       let approval = await store.get("approval", approvalId);
-      if (!["approve", "reject"].includes(action)) return res.json(textResponse("Aksi tidak valid."));
       if (!approval) return res.json(textResponse("Pengajuan tidak ditemukan."));
       if (email !== approval.approverEmail) return res.json(textResponse("Anda bukan approver pengajuan ini."));
       if (approval.status !== "PENDING") return res.json(textResponse("Pengajuan sudah " + approval.status + "."));
@@ -174,20 +212,11 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = 
       } } } } });
     }
 
-    // B. /daftar: ambil email dan ruang DM dari identitas Google, tanpa input NIK.
-    const payload = chat.appCommandPayload || chat.messagePayload;
-    const space = chat.space || payload?.space;
-    const text = String(payload?.message?.argumentText || payload?.message?.text || "").trim().toLowerCase();
-    const commandId = chat.appCommandPayload?.appCommandMetadata?.appCommandId;
-    if (text === "/daftar" || text === "daftar" || String(commandId) === "1") {
-      if (!email || space?.spaceType !== "DIRECT_MESSAGE" || !/^spaces\/[A-Za-z0-9_-]+$/.test(space?.name || "")) {
-        return res.json(textResponse("Kirim /daftar melalui DM bot."));
-      }
-      await store.set("user", email, { email, name: chat.user.displayName || email, space: space.name });
-      console.log("DAFTAR", email, space.name);
-      return res.json(textResponse("Pendaftaran berhasil. Anda sudah bisa menerima approval."));
+    // Sapaan atau bot baru ditambahkan: tampilkan tombol/status di DM.
+    if (!email || space?.spaceType !== "DIRECT_MESSAGE") {
+      return res.json(textResponse("Buka DM bot untuk mendaftar dan menerima approval."));
     }
-    return res.json(textResponse("Kirim /daftar melalui DM bot untuk menerima approval."));
+    return res.json(registrationMenu(await store.get("user", email)));
   });
 
   app.use((error, req, res, next) => {

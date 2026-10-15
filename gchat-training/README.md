@@ -12,8 +12,9 @@ File ketiga [store.js](store.js) berisi penyimpanan singkat untuk mendukung Verc
 ## Alur
 
 ~~~text
-1. Pengguna DM bot: /daftar
-   Google → POST /google-chat → users.set(email, data DM)
+1. Pengguna menyapa bot → kartu tombol Daftar
+   Klik Daftar → Google → POST /google-chat → simpan data DM
+   /daftar tetap tersedia sebagai cara alternatif
 
 2. Admin membuka halaman, memilih pengguna dan mengirim pengajuan
    POST /send-approval → approvals.set(id, PENDING)
@@ -119,7 +120,7 @@ Jika memakai bot/project Google baru, gunakan JSON pengirim dan identitas add-on
 1. Jalankan server dan tunnel.
 2. Lengkapi env dan konfigurasi endpoint Google.
 3. Buka halaman, login admin. Awalnya daftar kosong.
-4. Buka DM bot, jalankan /daftar.
+4. Buka DM bot, kirim halo lalu klik tombol Daftar. /daftar tetap bisa dipakai.
 5. Muat ulang halaman. Email pengguna muncul pada pilihan approver.
 6. Isi judul/detail lalu klik Kirim ke Google Chat.
 7. Buka kartu pada DM, klik Approve atau Reject.
@@ -196,3 +197,9 @@ npm --prefix gchat-training test
 Tes mencakup daftar, kartu/tujuan, approve/reject, pengklik lain, klik ulang, autentikasi, kegagalan kirim, escaping teks, reset memori, export Vercel dan PostgreSQL lintas-instance. Google dimock; tes tidak mengirim notifikasi nyata.
 
 Referensi: [event Google add-on](https://developers.google.com/workspace/add-ons/chat/build), [validasi ID token](https://developers.google.com/workspace/add-ons/guides/alternate-runtimes#validate_json_requests).
+
+## Pendaftaran dengan tombol
+
+Pengguna baru yang menyapa bot atau saat bot ditambahkan ke DM menerima kartu Selamat datang dengan tombol Daftar. Klik tombol mengirim action=register ke /google-chat. Identitas email/nama/ruang berasal dari event Google yang terverifikasi.
+
+Jika pengguna sudah terdaftar, sapaan berikutnya menampilkan kartu Akun terdaftar dan emailnya, tanpa meminta daftar ulang. /daftar tetap didukung. Tidak perlu mengaktifkan App Home untuk fitur ini. Pada DM yang sudah terbuka sebelumnya, kirim satu pesan seperti halo setelah deployment agar kartu baru muncul.
