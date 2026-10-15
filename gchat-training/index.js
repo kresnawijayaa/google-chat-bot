@@ -6,8 +6,10 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 // Satu aplikasi; Neon di Vercel atau memori untuk latihan lokal.
-function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = createStore(env.DATABASE_URL) } = {}) {
+function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = createStore(env.DATABASE_URL), allowedEmails = require("./allowed-emails.json") } = {}) {
   const app = express();
+  const allowed = new Set(allowedEmails.map(email => email.trim().toLowerCase()));
+  const isAllowed = email => allowed.has(String(email || "").trim().toLowerCase());
   app.use((req, res, next) => {
     if (env.VERCEL && !env.DATABASE_URL) return res.status(503).send("Isi DATABASE_URL Neon di Vercel lalu redeploy.");
     next();
@@ -92,7 +94,7 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = 
 
   // 5. Halaman HTML biasa. Tidak ada React, build frontend atau API tambahan.
   app.get("/", requireAdmin, async (req, res) => {
-    const users = await store.list("user");
+    const users = (await store.list("user")).filter(user => isAllowed(user.email));
     const approvals = await store.list("approval");
     const options = users.map(user =>
       '<option value="' + escape(user.email) + '">' + escape(user.name + " — " + user.email) + "</option>"
@@ -110,8 +112,9 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = 
     res.type("html").send(html
       .replace("{{storageNote}}", () => env.DATABASE_URL ? "Data latihan disimpan di Neon dan tetap ada setelah restart." : "Data latihan sementara; kosong kembali saat server direstart.")
       .replace("{{notice}}", () => notices[req.query.notice] ? '<p class="notice" role="status">' + notices[req.query.notice] + "</p>" : "")
-      .replace("{{options}}", () => options || '<option value="">Belum ada pengguna. Kirim /daftar ke bot.</option>')
+      .replace("{{options}}", () => options || '<option value="">Belum ada pengguna. Klik Daftar di DM bot.</option>')
       .replace("{{disabled}}", () => users.length ? "" : "disabled")
+      .replace("{{allowedRows}}", () => [...allowed].sort().map(email => "<tr><td>" + escape(email) + "</td></tr>").join("") || '<tr><td>Belum ada email yang diizinkan.</td></tr>')
       .replace("{{userRows}}", () => userRows || '<tr><td colspan="2">Belum ada pengguna terdaftar.</td></tr>')
       .replace("{{approvalRows}}", () => approvalRows || '<tr><td colspan="4">Belum ada pengajuan.</td></tr>'));
   });
@@ -122,6 +125,7 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = 
     try { origin = new URL(req.get("Origin")); } catch {}
     if (!origin || origin.host !== req.get("Host")) return res.status(403).send("Origin form tidak sesuai.");
     const { approverEmail, title, detail } = req.body;
+    if (!isAllowed(approverEmail)) return res.status(403).send("Email approver belum diizinkan oleh admin.");
     const user = await store.get("user", approverEmail);
     if (!user || typeof title !== "string" || !title.trim() || title.length > 150 ||
         typeof detail !== "string" || !detail.trim() || detail.length > 2000) {
@@ -172,6 +176,8 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = 
     const chat = event.chat;
     if (!chat) return res.status(400).json({ error: "Gunakan event Google Workspace add-on." });
     const email = String(chat.user?.email || "").trim().toLowerCase();
+    // Email berasal dari event Google terverifikasi, bukan input/parameter tombol.
+    if (!isAllowed(email)) return res.json(textResponse("Akun Google Chat Anda belum diizinkan menggunakan bot ini. Hubungi admin untuk menambahkan email Anda."));
 
     const payload = chat.appCommandPayload || chat.messagePayload;
     const space = chat.space || payload?.space || chat.buttonClickedPayload?.space ||

@@ -128,7 +128,7 @@ Jika memakai bot/project Google baru, gunakan JSON pengirim dan identitas add-on
 9. Coba klik kembali: keputusan pertama dipertahankan.
 10. Jika lokal tanpa DATABASE_URL, restart mengosongkan data. Dengan Neon, data tetap tersimpan.
 
-Tidak ada validasi NIK pada latihan ini. Identitas email/DM diambil dari event Google yang sudah diverifikasi.
+Tidak ada validasi NIK pada latihan ini. Email/DM diambil dari event Google yang sudah diverifikasi dan email wajib cocok dengan allowed-emails.json.
 
 ## Cara membaca index.js
 
@@ -203,3 +203,21 @@ Referensi: [event Google add-on](https://developers.google.com/workspace/add-ons
 Pengguna baru yang menyapa bot atau saat bot ditambahkan ke DM menerima kartu Selamat datang dengan tombol Daftar. Klik tombol mengirim action=register ke /google-chat. Identitas email/nama/ruang berasal dari event Google yang terverifikasi.
 
 Jika pengguna sudah terdaftar, sapaan berikutnya menampilkan kartu Akun terdaftar dan emailnya, tanpa meminta daftar ulang. /daftar tetap didukung. Tidak perlu mengaktifkan App Home untuk fitur ini. Pada DM yang sudah terbuka sebelumnya, kirim satu pesan seperti halo setelah deployment agar kartu baru muncul.
+
+## Daftar email yang diizinkan
+
+File [allowed-emails.json](allowed-emails.json) berisi email akun Google Chat yang boleh menggunakan bot. Isi awal:
+
+~~~json
+[
+  "kresnawijaya511@indomaret.com"
+]
+~~~
+
+Pendaftaran hanya berhasil jika email pengirim pada event Google masuk daftar ini. Input/parameter email pada tombol tidak dipakai sebagai identitas. Akun di luar daftar tidak mendapat tombol Daftar dan tetap ditolak lewat /daftar, slash command atau tombol lama.
+
+Untuk menambah pengguna: tambahkan email sebagai item JSON baru, commit/push lalu tunggu deployment Vercel; jika lokal, restart server. Tidak perlu menambahkan env atau menjalankan SQL. Email dicocokkan lowercase/trim; semua email lain ditolak, termasuk yang satu domain. Daftar kosong menolak semua akun.
+
+Daftar izin terlihat pada halaman admin. Data pengguna yang sudah berhasil mendaftar tetap disimpan di Neon dengan kind=user. File izin tidak otomatis mendaftarkan pengguna: akun yang diizinkan tetap perlu klik Daftar sekali agar ruang DM tersimpan.
+
+Akun yang dikeluarkan dari file tidak bisa menggunakan bot atau menjadi tujuan pengiriman baru. Data registrasi/riwayat lama tidak dihapus dari Neon; daftar pengguna dan pilihan approver di halaman latihan hanya menampilkan akun yang masih diizinkan.

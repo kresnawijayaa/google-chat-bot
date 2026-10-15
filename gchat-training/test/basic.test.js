@@ -13,7 +13,7 @@ const verifyGoogleToken = async token => {
   return { email: env.GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL, email_verified: true };
 };
 async function start(options = {}) {
-  const server = createApp({ env, verifyGoogleToken, ...options }).listen(0, "127.0.0.1");
+  const server = createApp({ env, verifyGoogleToken, allowedEmails: ["approver@example.com", "other@example.com", "a@example.com", "button@example.com", "new@example.com"], ...options }).listen(0, "127.0.0.1");
   await new Promise(resolve => server.once("listening", resolve));
   return { server, url: "http://127.0.0.1:" + server.address().port };
 }
@@ -136,5 +136,51 @@ test("Sapaan menampilkan tombol Daftar; klik menyimpan pengguna dan sapaan berik
       addedToSpacePayload: { space: { name: "spaces/NEW", spaceType: "DIRECT_MESSAGE" } },
     } };
     assert.match(JSON.stringify(await (await googleEvent(url, added)).json()), /buttonList/);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test("Daftar izin memakai identitas Google, menolak command/tombol lama dan pengguna lama di luar daftar", async () => {
+  const { createStore } = require("../store");
+  const store = createStore();
+  const allowedEmails = require("../allowed-emails.json");
+  assert.deepEqual(allowedEmails, ["kresnawijaya511@indomaret.com"]);
+  await store.set("user", "old@example.com", { email: "old@example.com", name: "Old", space: "spaces/OLD" });
+  const { server, url } = await start({ store, allowedEmails });
+  try {
+    const denied = registerEvent("outsider@indomaret.com");
+    for (const text of ["halo", "/daftar"]) {
+      denied.chat.messagePayload.message.text = text;
+      const response = await (await googleEvent(url, denied)).json();
+      assert.match(JSON.stringify(response), /belum diizinkan/);
+      assert.ok(!JSON.stringify(response).includes("buttonList"));
+    }
+    const command = registerEvent("outsider@indomaret.com");
+    delete command.chat.messagePayload;
+    command.chat.appCommandPayload = { appCommandMetadata: { appCommandId: 1 } };
+    assert.match(JSON.stringify(await (await googleEvent(url, command)).json()), /belum diizinkan/);
+    const staleButton = {
+      commonEventObject: { parameters: { action: "register", email: allowedEmails[0] } },
+      chat: { user: { email: "outsider@indomaret.com" }, space: denied.chat.space, buttonClickedPayload: {} },
+    };
+    assert.match(JSON.stringify(await (await googleEvent(url, staleButton)).json()), /belum diizinkan/);
+    assert.equal(await store.get("user", "outsider@indomaret.com"), undefined);
+    const owner = registerEvent(" KRESNAWIJAYA511@INDOMARET.COM ");
+    owner.chat.messagePayload.message.text = "halo";
+    assert.match(JSON.stringify(await (await googleEvent(url, owner)).json()), /buttonList/);
+    assert.equal(await store.get("user", allowedEmails[0]), undefined);
+    owner.chat.messagePayload.message.text = "/daftar";
+    assert.match(JSON.stringify(await (await googleEvent(url, owner)).json()), /Pendaftaran berhasil/);
+    assert.ok(await store.get("user", allowedEmails[0]));
+    const page = await (await fetch(url, { headers: { Authorization: admin } })).text();
+    assert.match(page, /Email yang diizinkan/);
+    assert.ok(!page.includes("old@example.com"));
+    const rejectedSend = await fetch(url + "/send-approval", {
+      method: "POST", redirect: "manual",
+      headers: { Authorization: admin, Origin: url, "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ approverEmail: "old@example.com", title: "Test", detail: "Detail" }),
+    });
+    assert.equal(rejectedSend.status, 403);
+    const oldUser = await (await googleEvent(url, registerEvent("old@example.com"))).json();
+    assert.match(JSON.stringify(oldUser), /belum diizinkan/);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

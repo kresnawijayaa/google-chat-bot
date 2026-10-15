@@ -27,7 +27,7 @@ test("PostgreSQL mempertahankan registrasi lintas-instance dan hanya menerima sa
   const servers = [];
   async function instance() {
     const app = appExport.createApp({
-      env, store: createStore(env.DATABASE_URL, sql),
+      env, allowedEmails: ["approver@example.com"], store: createStore(env.DATABASE_URL, sql),
       sendMessage: async (space, message) => sent.push({ space, message }),
       verifyGoogleToken: async () => ({ email: env.GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL, email_verified: true }),
     });
