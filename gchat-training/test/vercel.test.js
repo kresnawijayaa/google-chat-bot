@@ -27,7 +27,7 @@ test("PostgreSQL mempertahankan registrasi lintas-instance dan hanya menerima sa
   const servers = [];
   async function instance() {
     const app = appExport.createApp({
-      env, allowedEmails: ["approver@example.com"], store: createStore(env.DATABASE_URL, sql),
+      env, store: createStore(env.DATABASE_URL, sql),
       sendMessage: async (space, message) => sent.push({ space, message }),
       verifyGoogleToken: async () => ({ email: env.GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL, email_verified: true }),
     });
@@ -45,6 +45,10 @@ test("PostgreSQL mempertahankan registrasi lintas-instance dan hanya menerima sa
   const admin = "Basic " + Buffer.from("admin:" + env.ADMIN_PASSWORD).toString("base64");
   try {
     const first = await instance();
+    const initialStore = createStore(env.DATABASE_URL, sql);
+    assert.equal(await initialStore.isAllowed("approver@example.com"), false);
+    await db.query("INSERT INTO gchat_training_allowed_users (email) VALUES ('approver@example.com')");
+    assert.equal(await initialStore.isAllowed(" APPROVER@EXAMPLE.COM "), true);
     await event(first, { chat: {
       user: { email: "approver@example.com", displayName: "Atasan" },
       space: { name: "spaces/DEMO", spaceType: "DIRECT_MESSAGE" },
@@ -75,6 +79,13 @@ test("PostgreSQL mempertahankan registrasi lintas-instance dan hanya menerima sa
     // Metadata pengiriman tidak boleh menimpa keputusan.
     await createStore(env.DATABASE_URL, sql).patch("approval", id, { delivery: "SENT" });
     assert.equal((await createStore(env.DATABASE_URL, sql).get("approval", id)).status, stored.status);
+    // Perubahan SQL berlaku di instance yang sudah berjalan, tanpa redeploy.
+    await db.query("DELETE FROM gchat_training_allowed_users WHERE email='approver@example.com'");
+    const denied = await (await event(first, click("approve"))).json();
+    assert.match(JSON.stringify(denied), /belum diizinkan/);
+    assert.deepEqual(await initialStore.listAllowedEmails(), []);
+    await instance();
+    assert.equal(await initialStore.isAllowed("approver@example.com"), false);
     const brokenStore = createStore("postgresql://test:test@localhost/test", { query: async () => { throw Error("DB unavailable"); } });
     await assert.rejects(brokenStore.list("user"), /DB unavailable/);
   } finally {

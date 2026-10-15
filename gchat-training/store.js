@@ -1,14 +1,17 @@
 // Penyimpanan latihan: Neon untuk Vercel, Map untuk lokal tanpa DATABASE_URL.
-function createStore(databaseUrl, sqlClient) {
+function createStore(databaseUrl, sqlClient, memoryAllowedEmails = []) {
   const memory = new Map();
+  const allowed = new Set(memoryAllowedEmails.map(email => email.trim().toLowerCase()));
   const sql = sqlClient || (databaseUrl ? require("@neondatabase/serverless").neon(databaseUrl) : null);
   let ready;
   async function init() {
     if (!sql) return;
-    // Satu tabel terpisah dari data hub; dibuat otomatis saat pertama dipakai.
-    if (!ready) ready = sql.query(
+    // Tabel latihan terpisah dari data hub; dibuat otomatis saat pertama dipakai.
+    if (!ready) ready = (async () => { await sql.query(
       "CREATE TABLE IF NOT EXISTS gchat_training_data (kind TEXT NOT NULL, id TEXT NOT NULL, data JSONB NOT NULL, PRIMARY KEY (kind, id))", []
-    ).catch(error => { ready = null; throw error; });
+    ); await sql.query(
+      "CREATE TABLE IF NOT EXISTS gchat_training_allowed_users (email TEXT PRIMARY KEY CHECK (email = lower(btrim(email)) AND email <> ''))", []
+    ); })().catch(error => { ready = null; throw error; });
     await ready;
   }
   async function get(kind, id) {
@@ -18,6 +21,17 @@ function createStore(databaseUrl, sqlClient) {
   }
   return {
     get,
+    async listAllowedEmails() {
+      await init();
+      if (!sql) return [...allowed].sort();
+      return (await sql.query("SELECT email FROM gchat_training_allowed_users ORDER BY email", [])).map(row => row.email);
+    },
+    async isAllowed(email) {
+      await init();
+      email = String(email || "").trim().toLowerCase();
+      if (!sql) return allowed.has(email);
+      return (await sql.query("SELECT email FROM gchat_training_allowed_users WHERE email=$1", [email])).length > 0;
+    },
     async list(kind) {
       await init();
       if (!sql) return [...memory.entries()].filter(([key]) => key.startsWith(kind + ":")).map(([,data]) => structuredClone(data));

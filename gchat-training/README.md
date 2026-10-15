@@ -128,7 +128,7 @@ Jika memakai bot/project Google baru, gunakan JSON pengirim dan identitas add-on
 9. Coba klik kembali: keputusan pertama dipertahankan.
 10. Jika lokal tanpa DATABASE_URL, restart mengosongkan data. Dengan Neon, data tetap tersimpan.
 
-Tidak ada validasi NIK pada latihan ini. Email/DM diambil dari event Google yang sudah diverifikasi dan email wajib cocok dengan allowed-emails.json.
+Tidak ada validasi NIK pada latihan ini. Email/DM diambil dari event Google yang sudah diverifikasi dan email wajib ada di tabel gchat_training_allowed_users.
 
 ## Cara membaca index.js
 
@@ -206,18 +206,31 @@ Jika pengguna sudah terdaftar, sapaan berikutnya menampilkan kartu Akun terdafta
 
 ## Daftar email yang diizinkan
 
-File [allowed-emails.json](allowed-emails.json) berisi email akun Google Chat yang boleh menggunakan bot. Isi awal:
+Daftar izin disimpan di tabel Neon `gchat_training_allowed_users`, terpisah dari data registrasi. Jalankan [db/allowed-users.sql](db/allowed-users.sql) sekali pada database yang sama dengan DATABASE_URL. Skrip membuat tabel dan memasukkan kresnawijaya511@indomaret.com sebagai data awal. Aplikasi juga membuat tabel kosong otomatis jika belum ada; aplikasi tidak menambahkan ulang email yang sudah dihapus.
 
-~~~json
-[
-  "kresnawijaya511@indomaret.com"
-]
+Tambah email melalui Neon SQL Editor:
+
+~~~sql
+INSERT INTO gchat_training_allowed_users (email)
+VALUES (lower(trim('nama@indomaret.com')))
+ON CONFLICT (email) DO NOTHING;
 ~~~
 
-Pendaftaran hanya berhasil jika email pengirim pada event Google masuk daftar ini. Input/parameter email pada tombol tidak dipakai sebagai identitas. Akun di luar daftar tidak mendapat tombol Daftar dan tetap ditolak lewat /daftar, slash command atau tombol lama.
+Lihat daftar:
 
-Untuk menambah pengguna: tambahkan email sebagai item JSON baru, commit/push lalu tunggu deployment Vercel; jika lokal, restart server. Tidak perlu menambahkan env atau menjalankan SQL. Email dicocokkan lowercase/trim; semua email lain ditolak, termasuk yang satu domain. Daftar kosong menolak semua akun.
+~~~sql
+SELECT email FROM gchat_training_allowed_users ORDER BY email;
+~~~
 
-Daftar izin terlihat pada halaman admin. Data pengguna yang sudah berhasil mendaftar tetap disimpan di Neon dengan kind=user. File izin tidak otomatis mendaftarkan pengguna: akun yang diizinkan tetap perlu klik Daftar sekali agar ruang DM tersimpan.
+Cabut izin:
 
-Akun yang dikeluarkan dari file tidak bisa menggunakan bot atau menjadi tujuan pengiriman baru. Data registrasi/riwayat lama tidak dihapus dari Neon; daftar pengguna dan pilihan approver di halaman latihan hanya menampilkan akun yang masih diizinkan.
+~~~sql
+DELETE FROM gchat_training_allowed_users
+WHERE email = lower(trim('nama@indomaret.com'));
+~~~
+
+Perubahan berlaku pada request berikutnya tanpa push, restart atau redeploy. Refresh halaman admin untuk melihat daftar terbaru. Tidak ada env baru. Jika database gagal diakses, bot gagal memproses request; tidak melewati pemeriksaan izin. Tanpa DATABASE_URL, daftar izin lokal kosong dan semua akun ditolak.
+
+Identitas email berasal dari event Google terverifikasi, bukan input/parameter tombol. Akun di luar tabel tidak mendapat tombol Daftar dan ditolak lewat command, tombol lama maupun keputusan approval. Pengguna yang diizinkan tetap perlu klik Daftar sekali agar ruang DM tersimpan pada gchat_training_data (kind=user).
+
+Mencabut izin tidak menghapus data registrasi dan riwayat lama. Akun tersebut tidak bisa menggunakan bot atau menjadi penerima pengiriman baru. Daftar pengguna dan pilihan approver hanya menampilkan akun yang masih diizinkan.

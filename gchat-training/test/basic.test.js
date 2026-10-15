@@ -1,6 +1,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { createApp } = require("../index");
+const { createStore } = require("../store");
 
 const env = {
   PUBLIC_BASE_URL: "https://training.example.com",
@@ -13,7 +14,8 @@ const verifyGoogleToken = async token => {
   return { email: env.GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL, email_verified: true };
 };
 async function start(options = {}) {
-  const server = createApp({ env, verifyGoogleToken, allowedEmails: ["approver@example.com", "other@example.com", "a@example.com", "button@example.com", "new@example.com"], ...options }).listen(0, "127.0.0.1");
+  const store = createStore(undefined, undefined, ["approver@example.com", "other@example.com", "a@example.com", "button@example.com", "new@example.com"]);
+  const server = createApp({ env, verifyGoogleToken, store, ...options }).listen(0, "127.0.0.1");
   await new Promise(resolve => server.once("listening", resolve));
   return { server, url: "http://127.0.0.1:" + server.address().port };
 }
@@ -143,12 +145,10 @@ test("Sapaan menampilkan tombol Daftar; klik menyimpan pengguna dan sapaan berik
 });
 
 test("Daftar izin memakai identitas Google, menolak command/tombol lama dan pengguna lama di luar daftar", async () => {
-  const { createStore } = require("../store");
-  const store = createStore();
-  const allowedEmails = require("../allowed-emails.json");
-  assert.deepEqual(allowedEmails, ["kresnawijaya511@indomaret.com"]);
+  const allowedEmails = ["kresnawijaya511@indomaret.com"];
+  const store = createStore(undefined, undefined, allowedEmails);
   await store.set("user", "old@example.com", { email: "old@example.com", name: "Old", space: "spaces/OLD" });
-  const { server, url } = await start({ store, allowedEmails });
+  const { server, url } = await start({ store });
   try {
     const denied = registerEvent("outsider@indomaret.com");
     for (const text of ["halo", "/daftar"]) {
