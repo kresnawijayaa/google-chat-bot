@@ -41,4 +41,4 @@ Dokumentasi teknis lengkap dan contoh payload: [docs/dokumentasi-gchat.md](docs/
 
 Panduan developer program lain: [docs/integrasi-aplikasi.md](docs/integrasi-aplikasi.md). Tambahkan APP_CLIENTS_JSON pada hub dan redeploy untuk mengaktifkan API. Contoh Node.js: [examples/hub-client.cjs](examples/hub-client.cjs).
 
-Latihan paling sederhana, satu server lokal: [gchat-training/README.md](gchat-training/README.md). Jalankan npm run start:training. Data sementara; gunakan HTTPS tunnel untuk callback Google.
+Latihan sederhana satu aplikasi: [gchat-training/README.md](gchat-training/README.md). Jalankan npm run start:training, atau deploy Vercel dengan DATABASE_URL Neon. Penyimpanan latihan terpisah dari tabel hub.

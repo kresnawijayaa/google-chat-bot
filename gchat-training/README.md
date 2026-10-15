@@ -5,7 +5,9 @@ Project latihan terpisah. Baca dua file utama:
 - [index.js](index.js): server, daftar pengguna, kirim kartu, dan proses keputusan.
 - [index.html](index.html): form HTML dan tabel hasil, tanpa framework/JavaScript browser.
 
-Satu proses Node.js dan dua dependency: Express serta google-auth-library. Data sementara dalam Map; tidak memakai database, hub, gateway, NIK, API client, atau BRIDGE_SECRET.
+Satu aplikasi Node.js: Express, google-auth-library dan driver Neon. Data disimpan di Neon saat DATABASE_URL diisi; tanpa DATABASE_URL, lokal memakai Map sementara. Tidak memerlukan hub/gateway, NIK, API client atau BRIDGE_SECRET.
+
+File ketiga [store.js](store.js) berisi penyimpanan singkat untuk mendukung Vercel.
 
 ## Alur
 
@@ -47,7 +49,7 @@ Dependency sudah diinstal pada workspace saat project dibuat.
 
 ## Konfigurasi .env
 
-.env lokal sudah disiapkan dengan JSON pengirim dan password admin dari konfigurasi hub. Nilai tersebut tidak ikut Git. URL publik dan email add-on masih perlu dilengkapi.
+.env lokal sudah disiapkan dengan JSON pengirim dan password admin dari konfigurasi hub. Nilai tersebut tidak ikut Git. URL publik dan email add-on masih perlu dilengkapi. DATABASE_URL lokal juga sudah disalin dari hub.
 
 | Nama | Isi |
 | --- | --- |
@@ -55,11 +57,26 @@ Dependency sudah diinstal pada workspace saat project dibuat.
 | GOOGLE_SERVICE_ACCOUNT_JSON | Satu JSON lengkap service account bot pengirim |
 | GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL | Email service account identitas add-on pada Google Chat API Configuration |
 | ADMIN_PASSWORD | Password halaman demo, minimal 12 karakter |
+| DATABASE_URL | Wajib di Vercel; salin connection string Neon dari hub |
 | PORT | Opsional, default 3003 |
 
 Pengirim bot harus sesuai project Google Chat yang digunakan latihan. Email add-on berbeda fungsi dari client_email JSON pengirim.
 
 Jangan memakai URL gateway lama sebagai PUBLIC_BASE_URL latihan: URL itu harus benar-benar mengarah ke proses server latihan ini.
+
+## Deploy Vercel
+
+1. Project Vercel gchat-training → Settings → Build and Deployment → Root Directory = gchat-training.
+2. Isi lima env: PUBLIC_BASE_URL, GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_ADDON_SERVICE_ACCOUNT_EMAIL, ADMIN_PASSWORD dan DATABASE_URL.
+3. PUBLIC_BASE_URL adalah origin production project latihan, contoh https://NAMA-TRAINING.vercel.app, tanpa /google-chat.
+4. DATABASE_URL boleh persis sama dengan project hub. Tabel gchat_training_data dibuat otomatis dan terpisah dari tabel hub. Tidak perlu menjalankan schema manual.
+5. Redeploy versi terbaru. Export utama sekarang aplikasi Express; createApp tetap tersedia untuk tes.
+6. Google Chat API Configuration: endpoint/command trigger ke PUBLIC_BASE_URL + /google-chat; command /daftar ID 1.
+7. Buka domain latihan, login admin, lalu coba daftar dan kirim approval.
+
+Vercel memakai vercel.json untuk menjalankan semua route melalui index.js dan menyertakan index.html dalam bundle. Tidak perlu tunnel ketika memakai Vercel. Jangan mengganti env gateway/hub untuk latihan ini.
+
+Jika halaman menampilkan Isi DATABASE_URL Neon di Vercel lalu redeploy, lengkapi env tersebut dan redeploy. Data latihan ada pada satu tabel: kind=user untuk registrasi dan kind=approval untuk pengajuan. Keputusan memakai UPDATE bersyarat PENDING agar klik paralel dari instance berbeda hanya berhasil sekali.
 
 ## Agar Google dapat mencapai server lokal
 
@@ -80,7 +97,7 @@ Quick Tunnel memberi URL sementara yang berubah saat dibuat ulang, tanpa akun/do
 
 Jangan menambahkan login interaktif Cloudflare di depan /google-chat karena Google mengaksesnya sebagai server. Kode memverifikasi ID token Google, sedangkan halaman demo dilindungi Basic admin.
 
-Project memakai memori satu proses dan ditujukan untuk lokal/server Node yang terus berjalan. Jangan deploy versi ini ke Vercel serverless: state pengguna/approval tidak dijamin bertahan atau dibagi antarpanggilan.
+Untuk lokal tanpa DATABASE_URL, Map hilang saat restart. Untuk Vercel, DATABASE_URL wajib agar state dibagikan antar-instance.
 
 ## Konfigurasi Google Chat
 
@@ -108,7 +125,7 @@ Jika memakai bot/project Google baru, gunakan JSON pengirim dan identitas add-on
 7. Buka kartu pada DM, klik Approve atau Reject.
 8. Muat ulang halaman untuk melihat hasil.
 9. Coba klik kembali: keputusan pertama dipertahankan.
-10. Restart server untuk mulai latihan dari kosong.
+10. Jika lokal tanpa DATABASE_URL, restart mengosongkan data. Dengan Neon, data tetap tersimpan.
 
 Tidak ada validasi NIK pada latihan ini. Identitas email/DM diambil dari event Google yang sudah diverifikasi.
 
@@ -162,7 +179,7 @@ Google mengirim Authorization: Bearer <GOOGLE_ID_TOKEN>. Jangan memakai token lo
 
 ## Batas latihan
 
-- Server restart menghapus semua data. Kartu lama tidak dapat diputuskan karena ID sudah tidak ada.
+- Tanpa DATABASE_URL, restart menghapus data. Dengan Neon, data bertahan.
 - Setiap submit form membuat ID/pengajuan baru. Tidak ada retry/idempotency otomatis.
 - SENT berarti Google menerima pengiriman. FAILED berarti pengiriman belum terkonfirmasi; cek DM sebelum mengirim ulang karena timeout bisa terjadi setelah kartu diterima.
 - Keputusan hanya diterapkan satu kali dan email pengklik harus sesuai approver.
@@ -176,6 +193,6 @@ Google mengirim Authorization: Bearer <GOOGLE_ID_TOKEN>. Jangan memakai token lo
 npm --prefix gchat-training test
 ~~~
 
-Tes mencakup daftar, kartu/tujuan, approve/reject, pengklik lain, klik ulang, autentikasi, kegagalan kirim, escaping teks dan reset state. Google dimock; tes tidak mengirim notifikasi nyata.
+Tes mencakup daftar, kartu/tujuan, approve/reject, pengklik lain, klik ulang, autentikasi, kegagalan kirim, escaping teks, reset memori, export Vercel dan PostgreSQL lintas-instance. Google dimock; tes tidak mengirim notifikasi nyata.
 
 Referensi: [event Google add-on](https://developers.google.com/workspace/add-ons/chat/build), [validasi ID token](https://developers.google.com/workspace/add-ons/guides/alternate-runtimes#validate_json_requests).

@@ -1,14 +1,17 @@
 const express = require("express");
+const { createStore } = require("./store");
 const { GoogleAuth, OAuth2Client } = require("google-auth-library");
 const { randomUUID, createHash, timingSafeEqual } = require("node:crypto");
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
-// Satu aplikasi, satu proses. Dua Map ini adalah "database" latihan.
-function createApp({ env = process.env, sendMessage, verifyGoogleToken } = {}) {
+// Satu aplikasi; Neon di Vercel atau memori untuk latihan lokal.
+function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = createStore(env.DATABASE_URL) } = {}) {
   const app = express();
-  const users = new Map();
-  const approvals = new Map();
+  app.use((req, res, next) => {
+    if (env.VERCEL && !env.DATABASE_URL) return res.status(503).send("Isi DATABASE_URL Neon di Vercel lalu redeploy.");
+    next();
+  });
   const verifier = new OAuth2Client();
   app.use(express.urlencoded({ extended: false }));
   app.use(express.json({ limit: "128kb" }));
@@ -69,14 +72,16 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken } = {}) {
   }
 
   // 5. Halaman HTML biasa. Tidak ada React, build frontend atau API tambahan.
-  app.get("/", requireAdmin, (req, res) => {
-    const options = [...users.values()].map(user =>
+  app.get("/", requireAdmin, async (req, res) => {
+    const users = await store.list("user");
+    const approvals = await store.list("approval");
+    const options = users.map(user =>
       '<option value="' + escape(user.email) + '">' + escape(user.name + " — " + user.email) + "</option>"
     ).join("");
-    const userRows = [...users.values()].map(user =>
+    const userRows = users.map(user =>
       "<tr><td>" + escape(user.name) + "</td><td>" + escape(user.email) + "</td></tr>"
     ).join("");
-    const approvalRows = [...approvals.values()].reverse().map(item =>
+    const approvalRows = approvals.sort((a,b) => (b.createdAt || "").localeCompare(a.createdAt || "")).map(item =>
       "<tr><td>" + escape(item.title) + "<small>" + escape(item.id) + "</small></td><td>" +
       escape(item.approverEmail) + "</td><td>" + escape(item.delivery) + '</td><td class="' +
       item.status + '">' + item.status + "</td></tr>"
@@ -84,9 +89,10 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken } = {}) {
     const notices = { sent: "Approval terkirim. Buka DM Google Chat penerima.", failed: "Pengiriman tidak terkonfirmasi. Periksa log server dan DM penerima sebelum mengirim lagi." };
     const html = readFileSync(join(__dirname, "index.html"), "utf8");
     res.type("html").send(html
+      .replace("{{storageNote}}", () => env.DATABASE_URL ? "Data latihan disimpan di Neon dan tetap ada setelah restart." : "Data latihan sementara; kosong kembali saat server direstart.")
       .replace("{{notice}}", () => notices[req.query.notice] ? '<p class="notice" role="status">' + notices[req.query.notice] + "</p>" : "")
       .replace("{{options}}", () => options || '<option value="">Belum ada pengguna. Kirim /daftar ke bot.</option>')
-      .replace("{{disabled}}", () => users.size ? "" : "disabled")
+      .replace("{{disabled}}", () => users.length ? "" : "disabled")
       .replace("{{userRows}}", () => userRows || '<tr><td colspan="2">Belum ada pengguna terdaftar.</td></tr>')
       .replace("{{approvalRows}}", () => approvalRows || '<tr><td colspan="4">Belum ada pengajuan.</td></tr>'));
   });
@@ -97,14 +103,14 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken } = {}) {
     try { origin = new URL(req.get("Origin")); } catch {}
     if (!origin || origin.host !== req.get("Host")) return res.status(403).send("Origin form tidak sesuai.");
     const { approverEmail, title, detail } = req.body;
-    const user = users.get(approverEmail);
+    const user = await store.get("user", approverEmail);
     if (!user || typeof title !== "string" || !title.trim() || title.length > 150 ||
         typeof detail !== "string" || !detail.trim() || detail.length > 2000) {
       return res.status(400).send("Pilih pengguna terdaftar dan isi judul serta detail.");
     }
     callbackUrl(); // Validasi URL sebelum membuat record.
-    const approval = { id: randomUUID(), approverEmail, title: title.trim(), detail: detail.trim(), status: "PENDING", delivery: "SENDING" };
-    approvals.set(approval.id, approval);
+    const approval = { id: randomUUID(), approverEmail, title: title.trim(), detail: detail.trim(), status: "PENDING", delivery: "SENDING", createdAt: new Date().toISOString() };
+    await store.set("approval", approval.id, approval);
     try {
       const message = approvalCard(approval);
       if (sendMessage) await sendMessage(user.space, message);
@@ -121,11 +127,11 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken } = {}) {
           data: message, timeout: 10000,
         });
       }
-      approval.delivery = "SENT";
+      await store.patch("approval", approval.id, { delivery: "SENT" });
       console.log("KIRIM", approval.id, approverEmail);
       res.redirect(303, "/?notice=sent");
     } catch (error) {
-      approval.delivery = "FAILED"; // Timeout tidak selalu berarti kartu belum diterima.
+      await store.patch("approval", approval.id, { delivery: "FAILED" }); // Timeout tidak selalu berarti kartu belum diterima.
       console.error("Gagal kirim approval:", error.code || error.name);
       res.redirect(303, "/?notice=failed");
     }
@@ -151,12 +157,13 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken } = {}) {
     // A. Klik tombol: cek pengajuan, approver dan status, lalu ubah sekali saja.
     if (chat.buttonClickedPayload) {
       const { approvalId, action } = event.commonEventObject?.parameters || {};
-      const approval = approvals.get(approvalId);
+      let approval = await store.get("approval", approvalId);
       if (!["approve", "reject"].includes(action)) return res.json(textResponse("Aksi tidak valid."));
-      if (!approval) return res.json(textResponse("Pengajuan tidak ditemukan. Mungkin server sudah direstart."));
+      if (!approval) return res.json(textResponse("Pengajuan tidak ditemukan."));
       if (email !== approval.approverEmail) return res.json(textResponse("Anda bukan approver pengajuan ini."));
       if (approval.status !== "PENDING") return res.json(textResponse("Pengajuan sudah " + approval.status + "."));
-      approval.status = action === "approve" ? "APPROVED" : "REJECTED";
+      approval = await store.decide(approvalId, email, action === "approve" ? "APPROVED" : "REJECTED");
+      if (!approval) return res.json(textResponse("Pengajuan sudah diproses. Muat ulang halaman untuk melihat hasil."));
       console.log("KEPUTUSAN", approval.id, approval.status);
       return res.json({ hostAppDataAction: { chatDataAction: { updateMessageAction: { message: {
         text: approval.title + " — " + approval.status,
@@ -176,7 +183,7 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken } = {}) {
       if (!email || space?.spaceType !== "DIRECT_MESSAGE" || !/^spaces\/[A-Za-z0-9_-]+$/.test(space?.name || "")) {
         return res.json(textResponse("Kirim /daftar melalui DM bot."));
       }
-      users.set(email, { email, name: chat.user.displayName || email, space: space.name });
+      await store.set("user", email, { email, name: chat.user.displayName || email, space: space.name });
       console.log("DAFTAR", email, space.name);
       return res.json(textResponse("Pendaftaran berhasil. Anda sudah bisa menerima approval."));
     }
@@ -190,8 +197,10 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken } = {}) {
   return app;
 }
 
-if (require.main === module) {
-  createApp().listen(Number(process.env.PORT || 3003), "127.0.0.1", () =>
+const app = createApp();
+if (require.main === module && !process.env.VERCEL) {
+  app.listen(Number(process.env.PORT || 3003), "127.0.0.1", () =>
     console.log("Buka http://localhost:" + (process.env.PORT || 3003) + " — username: admin"));
 }
-module.exports = { createApp };
+module.exports = app; // Vercel memerlukan aplikasi Express sebagai export utama.
+module.exports.createApp = createApp; // Tetap tersedia untuk tes.
