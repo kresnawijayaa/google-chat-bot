@@ -60,7 +60,7 @@ function createApp({ env = process.env, sendMessage, verifyGoogleToken, store = 
       } },
     }] } });
     return { hostAppDataAction: { chatDataAction: { createMessageAction: { message: {
-      text, cardsV2: [{ cardId: "registration", card: {
+      fallbackText: text, cardsV2: [{ cardId: "registration", card: {
         header: { title: user ? "Akun terdaftar" : "Selamat datang" },
         sections: [{ widgets }],
       } }],
